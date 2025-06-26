@@ -1,6 +1,7 @@
 
 import type { Metadata } from "next";
 import Provider from "./provider";
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "PseudoBoard",

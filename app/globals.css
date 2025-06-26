@@ -3,3 +3,57 @@
   padding: 0;
   margin: 0;
 }
+
+.logo-container {
+  position: fixed;
+  top: -1rem;
+  left: 1.5rem;
+  z-index: 1001;
+}
+
+.app-logo {
+  display: block;
+}
+
+/* Mobile responsive logo positioning */
+@media (max-width: 768px) {
+  .logo-mobile {
+    position: fixed !important;
+    top: 0.5rem !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    z-index: 9999;
+  }
+  
+  .logo-mobile img {
+    width: 180px !important;
+    height: 50px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .logo-mobile {
+    top: 0.25rem !important;
+  }
+  
+  .logo-mobile img {
+    width: 150px !important;
+    height: 42px !important;
+  }
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  background-color: #fafafa;
+  overflow: hidden;
+}
+
+html {
+  margin: 0;
+  padding: 0;
+}
+
+#__next {
+  margin: 0;
+  padding: 0;
+}
