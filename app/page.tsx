@@ -38,7 +38,8 @@ export default function Home() {
           width={isMobile ? 180 : 300}
           height={isMobile ? 50 : 70}
           style={{ 
-            display: 'block'
+            display: 'block',
+            opacity: 0.7
           }}
         />
       </div>

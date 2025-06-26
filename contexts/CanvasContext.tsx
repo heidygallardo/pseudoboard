@@ -4,6 +4,13 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 type Tool = 'move' | 'draw' | 'text' | 'shape' | 'datastructures';
 
+interface DrawingStroke {
+  id: string;
+  points: { x: number; y: number }[];
+  color: string;
+  width: number;
+}
+
 interface CanvasContextType {
   activeTool: Tool;
   setActiveTool: (tool: Tool) => void;
@@ -11,6 +18,9 @@ interface CanvasContextType {
   setZoom: (zoom: number) => void;
   position: { x: number; y: number };
   setPosition: (position: { x: number; y: number }) => void;
+  strokes: DrawingStroke[];
+  setStrokes: (strokes: DrawingStroke[]) => void;
+  addStroke: (stroke: DrawingStroke) => void;
 }
 
 const CanvasContext = createContext<CanvasContextType | undefined>(undefined);
@@ -19,6 +29,11 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [activeTool, setActiveTool] = useState<Tool>('move');
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [strokes, setStrokes] = useState<DrawingStroke[]>([]);
+
+  const addStroke = (stroke: DrawingStroke) => {
+    setStrokes(prev => [...prev, stroke]);
+  };
 
   return (
     <CanvasContext.Provider
@@ -29,6 +44,9 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setZoom,
         position,
         setPosition,
+        strokes,
+        setStrokes,
+        addStroke,
       }}
     >
       {children}
