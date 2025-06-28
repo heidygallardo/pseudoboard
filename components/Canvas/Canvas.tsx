@@ -12,6 +12,7 @@ const Canvas: React.FC = React.memo(() => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<{ x: number; y: number }[]>([]);
   const [currentStrokeId, setCurrentStrokeId] = useState<string | null>(null);
+  const [lastDrawPoint, setLastDrawPoint] = useState<{ x: number; y: number } | null>(null);
 
   const getRelativePos = (e: React.MouseEvent | MouseEvent) => {
     const containerRect = canvasRef.current?.getBoundingClientRect();
@@ -38,6 +39,7 @@ const Canvas: React.FC = React.memo(() => {
       const strokeId = `stroke-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       setCurrentStrokeId(strokeId);
       setCurrentStroke([pos]);
+      setLastDrawPoint(pos);
     } else if (activeTool === 'eraser') {
       setDragging(true);
       const pos = getRelativePos(e);
@@ -57,17 +59,27 @@ const Canvas: React.FC = React.memo(() => {
         setPosition({ x: e.clientX - start.x, y: e.clientY - start.y });
       });
     } else if (activeTool === 'draw' && isDrawing && currentStrokeId) {
-      // Immediate local update for responsive drawing
-      const newStroke = [...currentStroke, pos];
-      setCurrentStroke(newStroke);
-      
-      // Update live stroke (optimized internally)
-      updateLiveStroke({
-        id: currentStrokeId,
-        points: newStroke,
-        color: '#000000',
-        width: 2
-      });
+      // Add point smoothing to reduce jitter
+      if (lastDrawPoint) {
+        const distance = Math.sqrt(
+          Math.pow(pos.x - lastDrawPoint.x, 2) + Math.pow(pos.y - lastDrawPoint.y, 2)
+        );
+        
+        // Only add point if it's moved enough (reduces noise)
+        if (distance > 2) {
+          const newStroke = [...currentStroke, pos];
+          setCurrentStroke(newStroke);
+          setLastDrawPoint(pos);
+          
+          // Update live stroke (optimized internally)
+          updateLiveStroke({
+            id: currentStrokeId,
+            points: newStroke,
+            color: '#000000',
+            width: 4
+          });
+        }
+      }
     } else if (activeTool === 'eraser' && dragging) {
       handleErase(pos);
     }
@@ -84,11 +96,12 @@ const Canvas: React.FC = React.memo(() => {
           id: currentStrokeId,
           points: currentStroke,
           color: '#000000',
-          width: 2
+          width: 4
         });
       }
       setCurrentStroke([]);
       setCurrentStrokeId(null);
+      setLastDrawPoint(null);
     } else if (activeTool === 'eraser') {
       setDragging(false);
     }
@@ -101,7 +114,7 @@ const Canvas: React.FC = React.memo(() => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragging, start, activeTool, isDrawing, currentStroke, currentStrokeId, updateCursor, updateLiveStroke, addStroke, position, deleteStroke, strokes]);
+  }, [dragging, start, activeTool, isDrawing, currentStroke, currentStrokeId, updateCursor, updateLiveStroke, addStroke, position, deleteStroke, strokes, lastDrawPoint]);
 
   // Eraser functionality
   const handleErase = (pos: { x: number; y: number }) => {
@@ -159,27 +172,35 @@ const Canvas: React.FC = React.memo(() => {
     );
   };
 
-  // Memoized path creation to avoid recalculation
+  // Memoized path creation for smooth doodle-like strokes
   const createPath = React.useMemo(() => 
     (points: { x: number; y: number }[]) => {
       if (points.length < 2) return '';
       
-      // Use quadratic curves for smoother lines
       if (points.length === 2) {
         return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
       }
       
+      // Create smooth but precise curves
       let path = `M ${points[0].x} ${points[0].y}`;
       
+      // Use quadratic curves for smoother lines while maintaining sharpness
       for (let i = 1; i < points.length - 1; i++) {
-        const xc = (points[i].x + points[i + 1].x) / 2;
-        const yc = (points[i].y + points[i + 1].y) / 2;
-        path += ` Q ${points[i].x} ${points[i].y} ${xc} ${yc}`;
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        
+        // Control point is the midpoint for smooth but sharp curves
+        const cpx = (p1.x + p2.x) / 2;
+        const cpy = (p1.y + p2.y) / 2;
+        
+        path += ` Q ${p1.x} ${p1.y} ${cpx} ${cpy}`;
       }
       
-      // Add final point
-      const lastPoint = points[points.length - 1];
-      path += ` T ${lastPoint.x} ${lastPoint.y}`;
+      // Add the final point
+      if (points.length > 1) {
+        const lastPoint = points[points.length - 1];
+        path += ` T ${lastPoint.x} ${lastPoint.y}`;
+      }
       
       return path;
     }, []
@@ -240,7 +261,6 @@ const Canvas: React.FC = React.memo(() => {
                 fill="none"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke" // Better performance
               />
             );
           })}
@@ -250,11 +270,10 @@ const Canvas: React.FC = React.memo(() => {
             <path
               d={createPath(currentStroke)}
               stroke="#000000"
-              strokeWidth={2 / zoom}
+              strokeWidth={4 / zoom}
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
-              vectorEffect="non-scaling-stroke"
             />
           )}
 

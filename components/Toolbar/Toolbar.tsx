@@ -5,6 +5,7 @@ import styles from './Toolbar.module.css';
 import Image from 'next/image';
 import { useCanvas } from '@/contexts/CanvasContext';
 import { useState, useRef, useEffect } from 'react';
+import TooltipWrapper from './TooltipWrapper';
 
 const Toolbar = () => {
   const { activeTool, setActiveTool, zoom, setZoom, clearAll } = useCanvas();
@@ -71,55 +72,71 @@ const Toolbar = () => {
 
   return (
     <Box className={styles.toolbarContainer}>
-      <Image
-        src="/icons/move.png"
-        alt="Move"
-        className={`${styles.toolbarIcon} ${activeTool === 'move' ? styles.active : ''}`}
-        width={40}
-        height={40}
-        onClick={() => setActiveTool('move')}
-      />
-      <Image
-        src="/icons/pencil.png"
-        alt="Draw"
-        className={`${styles.toolbarIcon} ${activeTool === 'draw' ? styles.active : ''}`}
-        width={40}
-        height={40}
-        onClick={() => setActiveTool('draw')}
-      />
-      <Image
-        src="/icons/eraserIcon.png"
-        alt="Eraser"
-        className={`${styles.toolbarIcon} ${activeTool === 'eraser' ? styles.active : ''}`}
-        width={40}
-        height={40}
-        onClick={() => setActiveTool('eraser')}
-      />
-      <Image
-        src="/icons/texticon.png"
-        alt="Text"
-        className={`${styles.toolbarIcon} ${activeTool === 'text' ? styles.active : ''}`}
-        width={40}
-        height={40}
-        onClick={() => setActiveTool('text')}
-      />
-      <Image
-        src="/icons/shapeicon.png"
-        alt="Shapes"
-        className={`${styles.toolbarIcon} ${activeTool === 'shape' ? styles.active : ''}`}
-        width={40}
-        height={40}
-        onClick={() => setActiveTool('shape')}
-      />
-      <div className={styles.dataStructureContainer} ref={dropdownRef}>
+      <TooltipWrapper tooltip="Move & Pan">
         <Image
-          src={getDataStructureIcon()}
-          alt={getDataStructureLabel()}
-          className={`${styles.toolbarIcon} ${showDataStructureDropdown ? styles.active : ''}`}
+          src="/icons/move.png"
+          alt="Move"
+          className={`${styles.toolbarIcon} ${activeTool === 'move' ? styles.active : ''}`}
           width={40}
           height={40}
-          onClick={handleDataStructureClick}
+          onClick={() => setActiveTool('move')}
         />
+      </TooltipWrapper>
+      
+      <TooltipWrapper tooltip="Draw">
+        <Image
+          src="/icons/pencil.png"
+          alt="Draw"
+          className={`${styles.toolbarIcon} ${activeTool === 'draw' ? styles.active : ''}`}
+          width={40}
+          height={40}
+          onClick={() => setActiveTool('draw')}
+        />
+      </TooltipWrapper>
+      
+      <TooltipWrapper tooltip="Eraser">
+        <Image
+          src="/icons/eraserIcon.png"
+          alt="Eraser"
+          className={`${styles.toolbarIcon} ${activeTool === 'eraser' ? styles.active : ''}`}
+          width={40}
+          height={40}
+          onClick={() => setActiveTool('eraser')}
+        />
+      </TooltipWrapper>
+      
+      <TooltipWrapper tooltip="Text">
+        <Image
+          src="/icons/texticon.png"
+          alt="Text"
+          className={`${styles.toolbarIcon} ${activeTool === 'text' ? styles.active : ''}`}
+          width={40}
+          height={40}
+          onClick={() => setActiveTool('text')}
+        />
+      </TooltipWrapper>
+      
+      <TooltipWrapper tooltip="Shapes">
+        <Image
+          src="/icons/shapeicon.png"
+          alt="Shapes"
+          className={`${styles.toolbarIcon} ${activeTool === 'shape' ? styles.active : ''}`}
+          width={40}
+          height={40}
+          onClick={() => setActiveTool('shape')}
+        />
+      </TooltipWrapper>
+      <div className={styles.dataStructureContainer} ref={dropdownRef}>
+        <TooltipWrapper tooltip={getDataStructureLabel()}>
+          <Image
+            src={getDataStructureIcon()}
+            alt={getDataStructureLabel()}
+            className={`${styles.toolbarIcon} ${showDataStructureDropdown ? styles.active : ''}`}
+            width={40}
+            height={40}
+            onClick={handleDataStructureClick}
+          />
+        </TooltipWrapper>
         
         {showDataStructureDropdown && (
           <div className={styles.dataStructureDropdown}>
@@ -167,23 +184,29 @@ const Toolbar = () => {
           </div>
         )}
       </div>
-      <Image
-        src="/icons/clearallIcon.png"
-        alt="Clear All"
-        className={styles.toolbarIcon}
-        width={40}
-        height={40}
-        onClick={clearAll}
-        style={{ cursor: 'pointer' }}
-      />
+      <TooltipWrapper tooltip="Clear All">
+        <Image
+          src="/icons/clearallIcon.png"
+          alt="Clear All"
+          className={styles.toolbarIcon}
+          width={40}
+          height={40}
+          onClick={clearAll}
+          style={{ cursor: 'pointer' }}
+        />
+      </TooltipWrapper>
       <div className={styles.zoomControls}>
-        <button className={styles.zoomButton} onClick={handleZoomOut}>
-          −
-        </button>
+        <TooltipWrapper tooltip="Zoom Out">
+          <button className={styles.zoomButton} onClick={handleZoomOut}>
+            −
+          </button>
+        </TooltipWrapper>
         <span className={styles.zoomLevel}>{Math.round(zoom * 100)}%</span>
-        <button className={styles.zoomButton} onClick={handleZoomIn}>
-          +
-        </button>
+        <TooltipWrapper tooltip="Zoom In">
+          <button className={styles.zoomButton} onClick={handleZoomIn}>
+            +
+          </button>
+        </TooltipWrapper>
       </div>
     </Box>
   );
