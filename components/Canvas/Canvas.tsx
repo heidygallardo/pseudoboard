@@ -1,16 +1,17 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useCanvas } from '@/contexts/CanvasContext';
 import './Grid.css';
 
-const Canvas: React.FC = () => {
+const Canvas: React.FC = React.memo(() => {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const { activeTool, zoom, position, setPosition, strokes, addStroke } = useCanvas();
+  const { activeTool, zoom, position, setPosition, strokes, addStroke, updateLiveStroke, userCursors, updateCursor, deleteStroke } = useCanvas();
   const [dragging, setDragging] = useState(false);
   const [start, setStart] = useState({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<{ x: number; y: number }[]>([]);
+  const [currentStrokeId, setCurrentStrokeId] = useState<string | null>(null);
 
   const getRelativePos = (e: React.MouseEvent | MouseEvent) => {
     const containerRect = canvasRef.current?.getBoundingClientRect();
@@ -34,33 +35,62 @@ const Canvas: React.FC = () => {
     } else if (activeTool === 'draw') {
       setIsDrawing(true);
       const pos = getRelativePos(e);
+      const strokeId = `stroke-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      setCurrentStrokeId(strokeId);
       setCurrentStroke([pos]);
+    } else if (activeTool === 'eraser') {
+      setDragging(true);
+      const pos = getRelativePos(e);
+      handleErase(pos);
     }
   };
 
   const handleMouseMove = (e: MouseEvent) => {
+    const pos = getRelativePos(e);
+    
+    // Always update cursor (throttled internally)
+    updateCursor(pos.x, pos.y);
+
     if (activeTool === 'move' && dragging) {
-      setPosition({ x: e.clientX - start.x, y: e.clientY - start.y });
-    } else if (activeTool === 'draw' && isDrawing) {
-      const pos = getRelativePos(e);
-      setCurrentStroke(prev => [...prev, pos]);
+      // Use requestAnimationFrame for smooth panning
+      requestAnimationFrame(() => {
+        setPosition({ x: e.clientX - start.x, y: e.clientY - start.y });
+      });
+    } else if (activeTool === 'draw' && isDrawing && currentStrokeId) {
+      // Immediate local update for responsive drawing
+      const newStroke = [...currentStroke, pos];
+      setCurrentStroke(newStroke);
+      
+      // Update live stroke (optimized internally)
+      updateLiveStroke({
+        id: currentStrokeId,
+        points: newStroke,
+        color: '#000000',
+        width: 2
+      });
+    } else if (activeTool === 'eraser' && dragging) {
+      handleErase(pos);
     }
   };
 
   const handleMouseUp = () => {
     if (activeTool === 'move') {
       setDragging(false);
-    } else if (activeTool === 'draw' && isDrawing) {
+    } else if (activeTool === 'draw' && isDrawing && currentStrokeId) {
       setIsDrawing(false);
       if (currentStroke.length > 1) {
+        // Finalize the stroke
         addStroke({
-          id: Date.now().toString(),
+          id: currentStrokeId,
           points: currentStroke,
           color: '#000000',
           width: 2
         });
       }
       setCurrentStroke([]);
+      setCurrentStrokeId(null);
+    } else if (activeTool === 'eraser') {
+      setDragging(false);
     }
   };
 
@@ -71,17 +101,89 @@ const Canvas: React.FC = () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragging, start, activeTool, isDrawing, currentStroke]);
+  }, [dragging, start, activeTool, isDrawing, currentStroke, currentStrokeId, updateCursor, updateLiveStroke, addStroke, position, deleteStroke, strokes]);
 
-  const createPath = (points: { x: number; y: number }[]) => {
-    if (points.length < 2) return '';
+  // Eraser functionality
+  const handleErase = (pos: { x: number; y: number }) => {
+    const eraserRadius = 10; // Eraser size
     
-    let path = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 1; i < points.length; i++) {
-      path += ` L ${points[i].x} ${points[i].y}`;
-    }
-    return path;
+    strokes.forEach(stroke => {
+      // Check if any point in the stroke is within eraser radius
+      const isHit = stroke.points.some(point => {
+        const distance = Math.sqrt(
+          Math.pow(point.x - pos.x, 2) + Math.pow(point.y - pos.y, 2)
+        );
+        return distance <= eraserRadius;
+      });
+      
+      if (isHit) {
+        deleteStroke(stroke.id);
+      }
+    });
   };
+
+  // Viewport culling helpers
+  const getStrokeBounds = (points: { x: number; y: number }[]) => {
+    if (points.length === 0) return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+    
+    let minX = points[0].x, maxX = points[0].x;
+    let minY = points[0].y, maxY = points[0].y;
+    
+    for (const point of points) {
+      minX = Math.min(minX, point.x);
+      maxX = Math.max(maxX, point.x);
+      minY = Math.min(minY, point.y);
+      maxY = Math.max(maxY, point.y);
+    }
+    
+    return { minX, minY, maxX, maxY };
+  };
+
+  const isInViewport = (bounds: { minX: number; minY: number; maxX: number; maxY: number }, pos: { x: number; y: number }, zoomLevel: number) => {
+    if (!canvasRef.current) return true;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const viewportMinX = (-pos.x) / zoomLevel;
+    const viewportMinY = (-pos.y) / zoomLevel;
+    const viewportMaxX = viewportMinX + rect.width / zoomLevel;
+    const viewportMaxY = viewportMinY + rect.height / zoomLevel;
+    
+    // Add padding for stroke width
+    const padding = 50;
+    
+    return !(
+      bounds.maxX + padding < viewportMinX ||
+      bounds.minX - padding > viewportMaxX ||
+      bounds.maxY + padding < viewportMinY ||
+      bounds.minY - padding > viewportMaxY
+    );
+  };
+
+  // Memoized path creation to avoid recalculation
+  const createPath = React.useMemo(() => 
+    (points: { x: number; y: number }[]) => {
+      if (points.length < 2) return '';
+      
+      // Use quadratic curves for smoother lines
+      if (points.length === 2) {
+        return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
+      }
+      
+      let path = `M ${points[0].x} ${points[0].y}`;
+      
+      for (let i = 1; i < points.length - 1; i++) {
+        const xc = (points[i].x + points[i + 1].x) / 2;
+        const yc = (points[i].y + points[i + 1].y) / 2;
+        path += ` Q ${points[i].x} ${points[i].y} ${xc} ${yc}`;
+      }
+      
+      // Add final point
+      const lastPoint = points[points.length - 1];
+      path += ` T ${lastPoint.x} ${lastPoint.y}`;
+      
+      return path;
+    }, []
+  );
 
   return (
     <div 
@@ -90,7 +192,8 @@ const Canvas: React.FC = () => {
       onMouseDown={handleMouseDown}
       style={{
         cursor: activeTool === 'move' ? (dragging ? 'grabbing' : 'grab') : 
-                activeTool === 'draw' ? 'crosshair' : 'default',
+                activeTool === 'draw' ? 'crosshair' : 
+                activeTool === 'eraser' ? 'pointer' : 'default',
       }}
     >
       <div
@@ -122,18 +225,25 @@ const Canvas: React.FC = () => {
         }}
       >
         <g transform={`translate(${position.x}, ${position.y}) scale(${zoom})`}>
-          {/* Render completed strokes */}
-          {strokes.map((stroke) => (
-            <path
-              key={stroke.id}
-              d={createPath(stroke.points)}
-              stroke={stroke.color}
-              strokeWidth={stroke.width / zoom}
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          ))}
+          {/* Render completed strokes with better performance */}
+          {strokes.map((stroke) => {
+            // Simple viewport culling - only render strokes that might be visible
+            const bounds = getStrokeBounds(stroke.points);
+            if (!isInViewport(bounds, position, zoom)) return null;
+            
+            return (
+              <path
+                key={stroke.id}
+                d={createPath(stroke.points)}
+                stroke={stroke.color}
+                strokeWidth={stroke.width / zoom}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke" // Better performance
+              />
+            );
+          })}
           
           {/* Render current stroke being drawn */}
           {isDrawing && currentStroke.length > 1 && (
@@ -144,12 +254,35 @@ const Canvas: React.FC = () => {
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
             />
           )}
+
+          {/* Render other users' cursors */}
+          {userCursors.map((cursor) => (
+            <g key={cursor.userId}>
+              <circle
+                cx={cursor.x}
+                cy={cursor.y}
+                r={8 / zoom}
+                fill={cursor.color}
+                opacity={0.8}
+              />
+              <text
+                x={cursor.x + 15 / zoom}
+                y={cursor.y - 10 / zoom}
+                fontSize={12 / zoom}
+                fill={cursor.color}
+                fontWeight="bold"
+              >
+                {cursor.userId.slice(-4)}
+              </text>
+            </g>
+          ))}
         </g>
       </svg>
     </div>
   );
-};
+});
 
 export default Canvas;

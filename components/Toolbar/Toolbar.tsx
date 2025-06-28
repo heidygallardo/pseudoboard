@@ -7,7 +7,7 @@ import { useCanvas } from '@/contexts/CanvasContext';
 import { useState, useRef, useEffect } from 'react';
 
 const Toolbar = () => {
-  const { activeTool, setActiveTool, zoom, setZoom } = useCanvas();
+  const { activeTool, setActiveTool, zoom, setZoom, clearAll } = useCanvas();
   const [showDataStructureDropdown, setShowDataStructureDropdown] = useState(false);
   const [selectedDataStructure, setSelectedDataStructure] = useState<string>('default');
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -88,6 +88,14 @@ const Toolbar = () => {
         onClick={() => setActiveTool('draw')}
       />
       <Image
+        src="/icons/eraserIcon.png"
+        alt="Eraser"
+        className={`${styles.toolbarIcon} ${activeTool === 'eraser' ? styles.active : ''}`}
+        width={40}
+        height={40}
+        onClick={() => setActiveTool('eraser')}
+      />
+      <Image
         src="/icons/texticon.png"
         alt="Text"
         className={`${styles.toolbarIcon} ${activeTool === 'text' ? styles.active : ''}`}
@@ -159,6 +167,15 @@ const Toolbar = () => {
           </div>
         )}
       </div>
+      <Image
+        src="/icons/clearallIcon.png"
+        alt="Clear All"
+        className={styles.toolbarIcon}
+        width={40}
+        height={40}
+        onClick={clearAll}
+        style={{ cursor: 'pointer' }}
+      />
       <div className={styles.zoomControls}>
         <button className={styles.zoomButton} onClick={handleZoomOut}>
           −
