@@ -3,6 +3,7 @@ import Image from "next/image";
 import { Heading } from "@chakra-ui/react";
 import Canvas from '@/components/Canvas/Canvas';
 import Toolbar from '@/components/Toolbar/Toolbar';
+import ShareButton from '@/components/ShareButton/ShareButton';
 import { CanvasProvider } from '@/contexts/CanvasContext';
 import { useEffect, useState } from 'react';
 
@@ -44,6 +45,7 @@ export default function Home() {
         />
       </div>
       <Toolbar />
+      <ShareButton />
       <Canvas />
     </CanvasProvider>
   );

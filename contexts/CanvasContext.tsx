@@ -16,13 +16,17 @@ interface CanvasContextType {
   setStrokes: (strokes: DrawingStroke[]) => void;
   addStroke: (stroke: DrawingStroke) => void;
   updateLiveStroke: (stroke: DrawingStroke) => void;
-  roomId: string;
+  roomId: string | null;
   setRoomId: (roomId: string) => void;
   userCursors: UserCursor[];
   updateCursor: (x: number, y: number) => void;
   userId: string;
   clearAll: () => void;
   deleteStroke: (strokeId: string) => void;
+  isCollaborative: boolean;
+  startCollaboration: () => string;
+  joinRoom: (roomId: string) => void;
+  leaveRoom: () => void;
 }
 
 const CanvasContext = createContext<CanvasContextType | undefined>(undefined);
@@ -33,13 +37,40 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [remoteStrokes, setRemoteStrokes] = useState<DrawingStroke[]>([]);
   const [localStrokes, setLocalStrokes] = useState<DrawingStroke[]>([]);
-  const [roomId, setRoomId] = useState('default-room');
+  const [roomId, setRoomIdState] = useState<string | null>(null);
   const [userCursors, setUserCursors] = useState<UserCursor[]>([]);
+  const [isCollaborative, setIsCollaborative] = useState(false);
   const [collaborationService] = useState<CollaborationService>(() => createCollaborationService());
 
-  // Initialize collaboration service
+  const joinRoom = (newRoomId: string) => {
+    setRoomIdState(newRoomId);
+    setIsCollaborative(true);
+    setLocalStrokes([]); // Clear local strokes when joining
+    setRemoteStrokes([]); // Will be loaded from Firebase
+    
+    // Update URL without reload
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('room', newRoomId);
+      window.history.pushState({}, '', url.toString());
+    }
+  };
+
+  // Check for room parameter in URL on mount
   useEffect(() => {
-    if (!roomId) return;
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomParam = urlParams.get('room');
+      
+      if (roomParam) {
+        joinRoom(roomParam);
+      }
+    }
+  }, []);
+
+  // Initialize collaboration service only when collaborative
+  useEffect(() => {
+    if (!roomId || !isCollaborative) return;
 
     const initializeCollaboration = async () => {
       try {
@@ -74,43 +105,91 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       cleanup?.();
       collaborationService.disconnect();
     };
-  }, [roomId, collaborationService]);
+  }, [roomId, isCollaborative, collaborationService]);
 
   const addStroke = async (stroke: DrawingStroke) => {
-    console.log('Adding stroke:', stroke.id, 'to room:', roomId);
-    
-    // Immediate local update for instant feedback
     const finalStroke = { ...stroke, userId: collaborationService.getUserId(), isComplete: true };
+    
+    // Always add to local strokes for immediate feedback
     setLocalStrokes(prev => {
       const filtered = prev.filter(s => s.id !== stroke.id);
       return [...filtered, finalStroke];
     });
     
-    // Send to collaboration service
-    await collaborationService.addStroke(stroke);
+    // Only sync to collaboration service if in collaborative mode
+    if (isCollaborative && roomId) {
+      try {
+        await collaborationService.addStroke(stroke);
+        console.log('Stroke synced to collaboration');
+      } catch (error) {
+        console.error('Error syncing stroke:', error);
+      }
+    }
   };
 
   const updateLiveStroke = (stroke: DrawingStroke) => {
-    // Immediate local update for instant feedback
+    // Always update local strokes for immediate feedback
     setLocalStrokes(prev => {
       const filtered = prev.filter(s => s.id !== stroke.id);
       return [...filtered, stroke];
     });
     
-    // Send to collaboration service (throttled internally)
-    collaborationService.updateLiveStroke(stroke);
+    // Only sync to collaboration service if in collaborative mode
+    if (isCollaborative && roomId) {
+      collaborationService.updateLiveStroke(stroke);
+    }
   };
 
   const updateCursor = (x: number, y: number) => {
-    // Send to collaboration service (throttled internally)
-    collaborationService.updateCursor(x, y);
+    // Only sync cursor if in collaborative mode
+    if (isCollaborative && roomId) {
+      collaborationService.updateCursor(x, y);
+    }
   };
 
-  const handleRoomChange = async (newRoomId: string) => {
-    await collaborationService.disconnect();
-    setRoomId(newRoomId);
-    setLocalStrokes([]);
+  const generateRoomId = (): string => {
+    return `room-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  };
+
+  const startCollaboration = (): string => {
+    const newRoomId = generateRoomId();
+    setRoomIdState(newRoomId);
+    setIsCollaborative(true);
+    
+    // Copy current local strokes to the new collaborative session
+    const currentStrokes = [...localStrokes];
+    setRemoteStrokes([]); // Will be synced from Firebase
+    
+    // Update URL without reload
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('room', newRoomId);
+      window.history.pushState({}, '', url.toString());
+    }
+    
+    return newRoomId;
+  };
+
+  const leaveRoom = async () => {
+    if (isCollaborative) {
+      await collaborationService.disconnect();
+    }
+    
+    setRoomIdState(null);
+    setIsCollaborative(false);
     setRemoteStrokes([]);
+    setUserCursors([]);
+    
+    // Remove room from URL
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('room');
+      window.history.pushState({}, '', url.toString());
+    }
+  };
+
+  const setRoomId = (newRoomId: string) => {
+    joinRoom(newRoomId);
   };
 
   const clearAll = async () => {
@@ -118,11 +197,13 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setLocalStrokes([]);
     setRemoteStrokes([]);
     
-    // Clear from collaboration service
-    try {
-      await collaborationService.clearAllStrokes();
-    } catch (error) {
-      console.error('Failed to clear all strokes:', error);
+    // Clear from collaboration service if collaborative
+    if (isCollaborative && roomId) {
+      try {
+        await collaborationService.clearAllStrokes();
+      } catch (error) {
+        console.error('Failed to clear all strokes:', error);
+      }
     }
   };
 
@@ -131,11 +212,13 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setLocalStrokes(prev => prev.filter(stroke => stroke.id !== strokeId));
     setRemoteStrokes(prev => prev.filter(stroke => stroke.id !== strokeId));
     
-    // Remove from collaboration service
-    try {
-      await collaborationService.deleteStroke(strokeId);
-    } catch (error) {
-      console.error('Failed to delete stroke:', error);
+    // Remove from collaboration service if collaborative
+    if (isCollaborative && roomId) {
+      try {
+        await collaborationService.deleteStroke(strokeId);
+      } catch (error) {
+        console.error('Failed to delete stroke:', error);
+      }
     }
   };
 
@@ -153,12 +236,16 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         addStroke,
         updateLiveStroke,
         roomId,
-        setRoomId: handleRoomChange,
+        setRoomId,
         userCursors,
         updateCursor,
         userId: collaborationService.getUserId(),
         clearAll,
         deleteStroke,
+        isCollaborative,
+        startCollaboration,
+        joinRoom,
+        leaveRoom,
       }}
     >
       {children}
