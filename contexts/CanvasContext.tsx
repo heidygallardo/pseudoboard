@@ -2,13 +2,29 @@
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-type Tool = 'move' | 'draw' | 'text' | 'shape' | 'datastructures';
+type Tool = 'move' | 'draw' | 'text' | 'shape' | 'datastructures' | 'array';
 
 interface DrawingStroke {
   id: string;
   points: { x: number; y: number }[];
   color: string;
   width: number;
+}
+
+interface ArrayElement {
+  value: string;
+  index: number;
+}
+
+interface ArrayDataStructure {
+  id: string;
+  x: number;
+  y: number;
+  elements: ArrayElement[];
+  width: number;
+  height: number;
+  cellSize: number;
+  style: 'textbook' | 'doodle';
 }
 
 interface CanvasContextType {
@@ -21,6 +37,10 @@ interface CanvasContextType {
   strokes: DrawingStroke[];
   setStrokes: (strokes: DrawingStroke[]) => void;
   addStroke: (stroke: DrawingStroke) => void;
+  arrays: ArrayDataStructure[];
+  setArrays: (arrays: ArrayDataStructure[]) => void;
+  addArray: (array: ArrayDataStructure) => void;
+  updateArrayStyle: (id: string, style: 'textbook' | 'doodle') => void;
 }
 
 const CanvasContext = createContext<CanvasContextType | undefined>(undefined);
@@ -30,9 +50,18 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [strokes, setStrokes] = useState<DrawingStroke[]>([]);
+  const [arrays, setArrays] = useState<ArrayDataStructure[]>([]);
 
   const addStroke = (stroke: DrawingStroke) => {
     setStrokes(prev => [...prev, stroke]);
+  };
+
+  const addArray = (array: ArrayDataStructure) => {
+    setArrays(prev => [...prev, array]);
+  };
+
+  const updateArrayStyle = (id: string, style: 'textbook' | 'doodle') => {
+    setArrays(prev => prev.map(arr => arr.id === id ? { ...arr, style } : arr));
   };
 
   return (
@@ -47,6 +76,10 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         strokes,
         setStrokes,
         addStroke,
+        arrays,
+        setArrays,
+        addArray,
+        updateArrayStyle,
       }}
     >
       {children}

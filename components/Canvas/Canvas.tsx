@@ -4,13 +4,84 @@ import { useRef, useState, useEffect } from 'react';
 import { useCanvas } from '@/contexts/CanvasContext';
 import './Grid.css';
 
+const PALETTE_ICON = (
+  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" style={{ display: 'block' }}>
+    <circle cx="10" cy="10" r="9" stroke="#888" strokeWidth="1.5" fill="#fff"/>
+    <circle cx="7" cy="8" r="1.2" fill="#888"/>
+    <circle cx="13" cy="8" r="1.2" fill="#888"/>
+    <circle cx="8" cy="13" r="1.2" fill="#888"/>
+    <circle cx="12" cy="13" r="1.2" fill="#888"/>
+  </svg>
+);
+const TEXTBOOK_ICON = (
+  <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="8" rx="2" stroke="#333" strokeWidth="2" fill="#fff"/></svg>
+);
+const DOODLE_ICON = (
+  <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M4 10 Q7 3 10 10 Q13 17 16 10" stroke="#333" strokeWidth="2" fill="none"/><ellipse cx="10" cy="10" rx="7" ry="4" stroke="#333" strokeWidth="1.5" fill="#fffbe7"/></svg>
+);
+
 const Canvas: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const { activeTool, zoom, position, setPosition, strokes, addStroke } = useCanvas();
+  const { activeTool, zoom, position, setPosition, strokes, addStroke, arrays, addArray, updateArrayStyle, setActiveTool, setArrays } = useCanvas();
   const [dragging, setDragging] = useState(false);
   const [start, setStart] = useState({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<{ x: number; y: number }[]>([]);
+  const [isPlacingArray, setIsPlacingArray] = useState(false);
+  const [arrayPreview, setArrayPreview] = useState<{ x: number; y: number } | null>(null);
+  const [hoveredArrayId, setHoveredArrayId] = useState<string | null>(null);
+  const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
+  const [popoverHover, setPopoverHover] = useState<string | null>(null);
+  const [draggingArrayId, setDraggingArrayId] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isActuallyDragging, setIsActuallyDragging] = useState(false);
+  const [editingCell, setEditingCell] = useState<null | { arrayId: string; cellIndex: number; field: 'value' | 'index'; value: string }> (null);
+
+  // Close popover on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.array-style-popover')) {
+        setOpenPopoverId(null);
+      }
+    };
+    if (openPopoverId) {
+      document.addEventListener('mousedown', handleClick);
+      return () => document.removeEventListener('mousedown', handleClick);
+    }
+  }, [openPopoverId]);
+
+  // Handle array dragging
+  useEffect(() => {
+    if (!draggingArrayId) return;
+    let moved = false;
+    const handleMouseMove = (e: MouseEvent) => {
+      moved = true;
+      setIsActuallyDragging(true);
+      const arr = arrays.find(a => a.id === draggingArrayId);
+      if (!arr) return;
+      const containerRect = canvasRef.current?.getBoundingClientRect();
+      if (!containerRect) return;
+      const mouseX = e.clientX - containerRect.left;
+      const mouseY = e.clientY - containerRect.top;
+      const newX = (mouseX - dragOffset.x - position.x) / zoom;
+      const newY = (mouseY - dragOffset.y - position.y) / zoom;
+      setArrays(arrays.map(a => a.id === draggingArrayId ? { ...a, x: newX, y: newY } : a));
+    };
+    const handleMouseUp = (e: MouseEvent) => {
+      setDraggingArrayId(null);
+      setTimeout(() => setIsActuallyDragging(false), 100);
+      // Prevent accidental text selection
+      if (moved) {
+        window.getSelection()?.removeAllRanges();
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggingArrayId, dragOffset, arrays, setArrays, position.x, position.y, zoom]);
 
   const getRelativePos = (e: React.MouseEvent | MouseEvent) => {
     const containerRect = canvasRef.current?.getBoundingClientRect();
@@ -27,6 +98,75 @@ const Canvas: React.FC = () => {
     };
   };
 
+  const createDefaultArray = (x: number, y: number) => {
+    const cellSize = 60;
+    const defaultElements = [
+      { value: '1', index: 0 },
+    ];
+    return {
+      id: Date.now().toString(),
+      x,
+      y,
+      elements: defaultElements,
+      width: defaultElements.length * cellSize,
+      height: cellSize,
+      cellSize,
+      style: 'textbook' as 'textbook',
+    };
+  };
+
+  // Add a new cell to an array by id
+  const addArrayCell = (arrayId: string) => {
+    const arr = arrays.find(a => a.id === arrayId);
+    if (!arr) return;
+    
+    // Find the highest index value among existing cells
+    const maxIndex = Math.max(...arr.elements.map(el => el.index), -1);
+    const newIndex = maxIndex + 1;
+    
+    const newElements = [
+      ...arr.elements,
+      { value: '', index: newIndex },
+    ];
+    const newWidth = newElements.length * arr.cellSize;
+    // Update the array in context
+    const updated = arrays.map(a => a.id === arrayId ? { ...a, elements: newElements, width: newWidth } : a);
+    setArrays(updated);
+  };
+
+  // Delete a cell from an array by id and index
+  const deleteArrayCell = (arrayId: string, cellIndex: number) => {
+    const arr = arrays.find(a => a.id === arrayId);
+    if (!arr || arr.elements.length <= 1) return; // Don't delete if only one cell remains
+    
+    const newElements = arr.elements.filter((_, index) => index !== cellIndex);
+    // Update indices for remaining elements
+    const updatedElements = newElements.map((el, index) => ({ ...el, index }));
+    const newWidth = updatedElements.length * arr.cellSize;
+    
+    // Update the array in context
+    const updated = arrays.map(a => a.id === arrayId ? { ...a, elements: updatedElements, width: newWidth } : a);
+    setArrays(updated);
+  };
+
+  // Update cell value or index
+  const updateCell = (arrayId: string, cellIndex: number, field: 'value' | 'index', newValue: string) => {
+    setArrays(arrays.map(arr => {
+      if (arr.id !== arrayId) return arr;
+      const newElements = arr.elements.map((el, idx) => {
+        if (idx !== cellIndex) return el;
+        if (field === 'value') {
+          return { ...el, value: newValue };
+        } else {
+          // For index, update index (as number if possible)
+          const idxNum = parseInt(newValue, 10);
+          return { ...el, index: isNaN(idxNum) ? el.index : idxNum };
+        }
+      });
+      return { ...arr, elements: newElements };
+    }));
+  };
+
   const handleMouseDown = (e: React.MouseEvent) => {
     if (activeTool === 'move') {
       setDragging(true);
@@ -35,6 +175,11 @@ const Canvas: React.FC = () => {
       setIsDrawing(true);
       const pos = getRelativePos(e);
       setCurrentStroke([pos]);
+    } else if (activeTool === 'array') {
+      const pos = getRelativePos(e);
+      const newArray = createDefaultArray(pos.x, pos.y);
+      addArray(newArray);
+      setActiveTool('move');
     }
   };
 
@@ -44,6 +189,9 @@ const Canvas: React.FC = () => {
     } else if (activeTool === 'draw' && isDrawing) {
       const pos = getRelativePos(e);
       setCurrentStroke(prev => [...prev, pos]);
+    } else if (activeTool === 'array') {
+      const pos = getRelativePos(e);
+      setArrayPreview(pos);
     }
   };
 
@@ -83,71 +231,545 @@ const Canvas: React.FC = () => {
     return path;
   };
 
-  return (
-    <div 
-      ref={canvasRef}
-      className="canvas-container"
-      onMouseDown={handleMouseDown}
-      style={{
-        cursor: activeTool === 'move' ? (dragging ? 'grabbing' : 'grab') : 
-                activeTool === 'draw' ? 'crosshair' : 'default',
-      }}
-    >
-      <div
-        className="canvas-background"
-        style={{
-          backgroundPosition: `${position.x}px ${position.y}px`,
-          backgroundSize: `${40 * zoom}px ${40 * zoom}px`,
-        }}
-      />
-      <div
-        className="canvas-content"
-        style={{
-          transform: `translate(${position.x}px, ${position.y}px) scale(${zoom})`,
-        }}
+  const renderArray = (array: any) => {
+    const { x, y, elements, cellSize, width, height, style, id } = array;
+    // Palette icon position (to the right of the ghost cell)
+    const ghostCellX = x + elements.length * cellSize;
+    const ghostCellY = y;
+    const iconX = ghostCellX + cellSize + 8;
+    const iconY = y + cellSize / 2 - 12; // vertically centered with cells
+    // Popover position
+    const popoverX = iconX + 28;
+    const popoverY = iconY - 8;
+    // Show palette icon only on hover
+    const showPalette = hoveredArrayId === id;
+    // Show popover if openPopoverId === id
+    const showPopover = openPopoverId === id;
+    // Palette icon button (show popover on hover)
+    const paletteButton = (
+      <foreignObject x={iconX} y={iconY} width={24} height={24} style={{ overflow: 'visible', cursor: 'pointer' }}>
+        <div
+          style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 12, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.10)', border: '1px solid #eee' }}
+          onMouseEnter={() => setOpenPopoverId(id)}
+          onMouseLeave={() => setTimeout(() => { if (!popoverHover) setOpenPopoverId(null); }, 100) }
+        >
+          {PALETTE_ICON}
+        </div>
+      </foreignObject>
+    );
+    // Popover with style options (show on hover)
+    const stylePopover = openPopoverId === id && (
+      <foreignObject x={popoverX} y={popoverY} width={170} height={90} className="array-style-popover" style={{ overflow: 'visible', zIndex: 10 }}>
+        <div
+          style={{ minWidth: 150, background: '#fff', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.13)', border: '1px solid #eee', padding: '12px 16px', fontSize: 14 }}
+          onMouseEnter={() => setPopoverHover(id)}
+          onMouseLeave={() => { setPopoverHover(null); setOpenPopoverId(null); }}
+        >
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10, color: '#222' }}>Array Style</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: style === 'textbook' ? '#f3f4f6' : 'transparent' }}>
+            <input type="radio" name={`array-style-${id}`} value="textbook" checked={style === 'textbook'} onChange={() => updateArrayStyle(id, 'textbook')} style={{ accentColor: '#2563eb' }} />
+            <span style={{ fontWeight: 500, color: '#222' }}>Textbook Style</span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: style === 'doodle' ? '#f3f4f6' : 'transparent' }}>
+            <input type="radio" name={`array-style-${id}`} value="doodle" checked={style === 'doodle'} onChange={() => updateArrayStyle(id, 'doodle')} style={{ accentColor: '#2563eb' }} />
+            <span style={{ fontWeight: 500, color: '#222' }}>Doodle Style</span>
+          </label>
+        </div>
+      </foreignObject>
+    );
+    // Mouse event handlers for hover
+    const handleGroupMouseEnter = () => setHoveredArrayId(id);
+    const handleGroupMouseLeave = () => setHoveredArrayId(current => (current === id ? null : current));
+    // Ghost cell (for adding new cells)
+    const ghostCell = (
+      <g
+        style={{ cursor: 'pointer' }}
+        onClick={e => { e.stopPropagation(); addArrayCell(id); }}
       >
-        {/* Future content like shapes, text, etc. will go here */}
-      </div>
-      
-      {/* SVG layer for drawings - positioned absolutely in container coordinates */}
-      <svg
-        width="100%"
-        height="100%"
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          pointerEvents: 'none',
-          overflow: 'visible'
-        }}
-      >
-        <g transform={`translate(${position.x}, ${position.y}) scale(${zoom})`}>
-          {/* Render completed strokes */}
-          {strokes.map((stroke) => (
-            <path
-              key={stroke.id}
-              d={createPath(stroke.points)}
-              stroke={stroke.color}
-              strokeWidth={stroke.width / zoom}
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          ))}
-          
-          {/* Render current stroke being drawn */}
-          {isDrawing && currentStroke.length > 1 && (
-            <path
-              d={createPath(currentStroke)}
-              stroke="#000000"
-              strokeWidth={2 / zoom}
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          )}
+        <rect
+          x={ghostCellX}
+          y={ghostCellY}
+          width={cellSize}
+          height={cellSize}
+          fill="transparent"
+          stroke="#999"
+          strokeWidth="1"
+          rx="4"
+        />
+        <text
+          x={ghostCellX + cellSize / 2}
+          y={ghostCellY + cellSize / 2 + 4}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize="24"
+          fill="#999"
+          fontFamily="sans-serif"
+          fontStyle="italic"
+        >
+          +
+        </text>
+      </g>
+    );
+    // Drag handlers
+    const handleArrayMouseDown = (e: React.MouseEvent) => {
+      // Prevent drag if clicking ghost cell or palette/popover or text
+      const target = e.target as HTMLElement;
+      if (
+        target.closest('.array-style-popover') ||
+        (target.tagName === 'text') ||
+        (target.tagName === 'tspan') ||
+        (target.tagName === 'INPUT') ||
+        (target.closest('foreignObject'))
+      ) {
+        return;
+      }
+      // Only allow dragging in move mode
+      if (activeTool !== 'move') {
+        return;
+      }
+      // Only left mouse button
+      if (e.button !== 0) return;
+      const containerRect = canvasRef.current?.getBoundingClientRect();
+      if (!containerRect) return;
+      const mouseX = e.clientX - containerRect.left;
+      const mouseY = e.clientY - containerRect.top;
+      setDraggingArrayId(id);
+      setDragOffset({ x: mouseX - (x * zoom + position.x), y: mouseY - (y * zoom + position.y) });
+    };
+    // Drag shadow/highlight
+    const dragging = draggingArrayId === id && isActuallyDragging;
+    const groupStyle: React.CSSProperties = {
+      pointerEvents: 'auto',
+      cursor: 'move',
+      filter: dragging ? 'drop-shadow(0 4px 16px rgba(0,0,0,0.18))' : undefined,
+      transition: dragging ? 'none' : 'filter 0.18s',
+      zIndex: dragging ? 10 : undefined,
+      userSelect: dragging ? 'none' : undefined,
+    };
+    if (style === 'doodle') {
+      return (
+        <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleArrayMouseDown}>
+          {ghostCell}
+          {paletteButton}
+          {stylePopover}
+          {/* Transparent background for dragging */}
+          <rect
+            x={x}
+            y={y}
+            width={width}
+            height={height}
+            fill="transparent"
+            stroke="none"
+          />
+          {/* Minimalistic doodle-style container (slightly wavy rectangle, no fill) */}
+          <path
+            d={`M${x+2},${y+2} Q${x+width/2},${y-4} ${x+width-2},${y+2} Q${x+width+4},${y+height/2} ${x+width-2},${y+height-2} Q${x+width/2},${y+height+4} ${x+2},${y+height-2} Q${x-4},${y+height/2} ${x+2},${y+2}`}
+            fill="none"
+            stroke="#222"
+            strokeWidth="1.2"
+          />
+          {/* Minimalistic doodle-style cells (no fill) */}
+          {elements.map((element: any, index: number) => {
+            const cellX = x + index * cellSize;
+            const cellY = y;
+            // Editing value
+            const isEditingValue = editingCell && editingCell.arrayId === id && editingCell.cellIndex === index && editingCell.field === 'value';
+            // Editing index
+            const isEditingIndex = editingCell && editingCell.arrayId === id && editingCell.cellIndex === index && editingCell.field === 'index';
+            return (
+              <g key={index}>
+                {/* Slightly wavy cell border */}
+                <path
+                  d={`M${cellX+2},${cellY+2} Q${cellX+cellSize/2},${cellY-2} ${cellX+cellSize-2},${cellY+2} Q${cellX+cellSize+2},${cellY+cellSize/2} ${cellX+cellSize-2},${cellY+cellSize-2} Q${cellX+cellSize/2},${cellY+cellSize+2} ${cellX+2},${cellY+cellSize-2} Q${cellX-2},${cellY+cellSize/2} ${cellX+2},${cellY+2}`}
+                  fill="none"
+                  stroke="#222"
+                  strokeWidth="1"
+                />
+                {/* Editable value */}
+                {isEditingValue ? (
+                  <foreignObject x={cellX + cellSize * 0.1} y={cellY + cellSize * 0.25} width={cellSize * 0.8} height={cellSize * 0.5}>
+                    <input
+                      type="text"
+                      value={editingCell.value}
+                      autoFocus
+                      style={{ width: '100%', fontSize: 16, fontStyle: 'italic', textAlign: 'center', border: '1px solid #bbb', borderRadius: 4, outline: 'none', background: '#fff', color: '#222', fontFamily: 'sans-serif' }}
+                      onChange={e => setEditingCell({ ...editingCell, value: e.target.value })}
+                      onBlur={() => { updateCell(id, index, 'value', editingCell.value); setEditingCell(null); }}
+                      onKeyDown={e => { if (e.key === 'Enter') { updateCell(id, index, 'value', editingCell.value); setEditingCell(null); } }}
+                    />
+                  </foreignObject>
+                ) : (
+                  <>
+                    {/* Transparent background for easier clicking */}
+                    <rect
+                      x={cellX + cellSize * 0.1}
+                      y={cellY + cellSize * 0.1}
+                      width={cellSize * 0.8}
+                      height={cellSize * 0.8}
+                      fill="transparent"
+                      stroke="none"
+                      style={{ cursor: 'pointer' }}
+                      onClick={e => { 
+                        e.stopPropagation(); 
+                        console.log('Cell value background clicked:', { arrayId: id, cellIndex: index, value: element.value });
+                        setEditingCell({ arrayId: id, cellIndex: index, field: 'value', value: element.value }); 
+                      }}
+                    />
+                    <text
+                      x={cellX + cellSize / 2}
+                      y={cellY + cellSize / 2 + 5}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize="16"
+                      fontStyle="italic"
+                      fill="#222"
+                      fontFamily="sans-serif"
+                      style={{ cursor: 'pointer', pointerEvents: 'none' }}
+                      onMouseEnter={e => { e.currentTarget.style.fill = '#0066cc'; e.currentTarget.style.textDecoration = 'underline'; }}
+                      onMouseLeave={e => { e.currentTarget.style.fill = '#222'; e.currentTarget.style.textDecoration = 'none'; }}
+                    >
+                      {element.value}
+                    </text>
+                  </>
+                )}
+                {/* Editable index */}
+                {isEditingIndex ? (
+                  <foreignObject x={cellX + cellSize * 0.25} y={cellY + cellSize + 2} width={cellSize * 0.5} height={18}>
+                    <input
+                      type="text"
+                      value={editingCell.value}
+                      autoFocus
+                      style={{ width: '100%', fontSize: 12, fontStyle: 'italic', textAlign: 'center', border: '1px solid #bbb', borderRadius: 4, outline: 'none', background: '#fff', color: '#222', fontFamily: 'sans-serif' }}
+                      onChange={e => setEditingCell({ ...editingCell, value: e.target.value })}
+                      onBlur={() => { updateCell(id, index, 'index', editingCell.value); setEditingCell(null); }}
+                      onKeyDown={e => { if (e.key === 'Enter') { updateCell(id, index, 'index', editingCell.value); setEditingCell(null); } }}
+                    />
+                  </foreignObject>
+                ) : (
+                  <text
+                    x={cellX + cellSize / 2}
+                    y={cellY + cellSize + 15}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize="12"
+                    fill="#222"
+                    fontFamily="sans-serif"
+                    fontStyle="italic"
+                    style={{ cursor: 'pointer' }}
+                    onMouseEnter={e => { e.currentTarget.style.fill = '#0066cc'; e.currentTarget.style.textDecoration = 'underline'; }}
+                    onMouseLeave={e => { e.currentTarget.style.fill = '#222'; e.currentTarget.style.textDecoration = 'none'; }}
+                    onClick={e => { 
+                      e.stopPropagation(); 
+                      console.log('Cell index clicked:', { arrayId: id, cellIndex: index, index: element.index });
+                      setEditingCell({ arrayId: id, cellIndex: index, field: 'index', value: element.index.toString() }); 
+                    }}
+                  >
+                    {element.index}
+                  </text>
+                )}
+                {/* Delete button (minus sign) - only show if more than 1 cell */}
+                {elements.length > 1 && (
+                  <g
+                    style={{ cursor: 'pointer' }}
+                    onClick={e => { 
+                      e.stopPropagation(); 
+                      console.log('Delete cell clicked:', { arrayId: id, cellIndex: index });
+                      deleteArrayCell(id, index); 
+                    }}
+                  >
+                    <circle
+                      cx={cellX + cellSize - 6}
+                      cy={cellY + 6}
+                      r="6"
+                      fill="transparent"
+                      stroke="#999"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={cellX + cellSize - 6}
+                      y={cellY + 6}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize="10"
+                      fill="#999"
+                      style={{ pointerEvents: 'none' }}
+                    >
+                      −
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+          {/* Minimalistic ghost cell (no fill, just border) */}
+          {(() => {
+            const ghostCellX = x + elements.length * cellSize;
+            const ghostCellY = y;
+            return (
+              <g
+                style={{ cursor: 'pointer' }}
+                onClick={e => { e.stopPropagation(); addArrayCell(id); }}
+              >
+                <path
+                  d={`M${ghostCellX+2},${ghostCellY+2} Q${ghostCellX+cellSize/2},${ghostCellY-2} ${ghostCellX+cellSize-2},${ghostCellY+2} Q${ghostCellX+cellSize+2},${ghostCellY+cellSize/2} ${ghostCellX+cellSize-2},${ghostCellY+cellSize-2} Q${ghostCellX+cellSize/2},${ghostCellY+cellSize+2} ${ghostCellX+2},${ghostCellY+cellSize-2} Q${ghostCellX-2},${ghostCellY+cellSize/2} ${ghostCellX+2},${ghostCellY+2}`}
+                  fill="none"
+                  stroke="#999"
+                  strokeWidth="1"
+                />
+                <text
+                  x={ghostCellX + cellSize / 2}
+                  y={ghostCellY + cellSize / 2 + 4}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize="24"
+                  fill="#999"
+                  fontFamily="sans-serif"
+                  fontStyle="italic"
+                >
+                  +
+                </text>
+              </g>
+            );
+          })()}
         </g>
-      </svg>
+      );
+    }
+    // Textbook style (default)
+    return (
+      <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleArrayMouseDown}>
+        {ghostCell}
+        {paletteButton}
+        {stylePopover}
+        {/* Array container */}
+        <rect
+          x={x}
+          y={y}
+          width={width}
+          height={height}
+          fill="white"
+          stroke="#222"
+          strokeWidth="2"
+          rx="4"
+        />
+        {/* Array elements */}
+        {elements.map((element: any, index: number) => {
+          const cellX = x + index * cellSize;
+          const cellY = y;
+          // Editing value
+          const isEditingValue = editingCell && editingCell.arrayId === id && editingCell.cellIndex === index && editingCell.field === 'value';
+          // Editing index
+          const isEditingIndex = editingCell && editingCell.arrayId === id && editingCell.cellIndex === index && editingCell.field === 'index';
+          return (
+            <g key={index}>
+              {/* Cell border */}
+              <rect
+                x={cellX}
+                y={cellY}
+                width={cellSize}
+                height={cellSize}
+                fill="none"
+                stroke="#222"
+                strokeWidth="1"
+              />
+              {/* Editable value */}
+              {isEditingValue ? (
+                <foreignObject x={cellX + cellSize * 0.1} y={cellY + cellSize * 0.25} width={cellSize * 0.8} height={cellSize * 0.5}>
+                  <input
+                    type="text"
+                    value={editingCell.value}
+                    autoFocus
+                    style={{ width: '100%', fontSize: 16, fontStyle: 'italic', textAlign: 'center', border: '1px solid #bbb', borderRadius: 4, outline: 'none', background: '#fff', color: '#222', fontFamily: 'sans-serif' }}
+                    onChange={e => setEditingCell({ ...editingCell, value: e.target.value })}
+                    onBlur={() => { updateCell(id, index, 'value', editingCell.value); setEditingCell(null); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { updateCell(id, index, 'value', editingCell.value); setEditingCell(null); } }}
+                  />
+                </foreignObject>
+              ) : (
+                <>
+                  {/* Transparent background for easier clicking */}
+                  <rect
+                    x={cellX + cellSize * 0.1}
+                    y={cellY + cellSize * 0.1}
+                    width={cellSize * 0.8}
+                    height={cellSize * 0.8}
+                    fill="transparent"
+                    stroke="none"
+                    style={{ cursor: 'pointer' }}
+                    onClick={e => { 
+                      e.stopPropagation(); 
+                      console.log('Cell value background clicked:', { arrayId: id, cellIndex: index, value: element.value });
+                      setEditingCell({ arrayId: id, cellIndex: index, field: 'value', value: element.value }); 
+                    }}
+                  />
+                  <text
+                    x={cellX + cellSize / 2}
+                    y={cellY + cellSize / 2 + 5}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize="16"
+                    fontStyle="italic"
+                    fill="#222"
+                    fontFamily="sans-serif"
+                    style={{ cursor: 'pointer', pointerEvents: 'none' }}
+                    onMouseEnter={e => { e.currentTarget.style.fill = '#0066cc'; e.currentTarget.style.textDecoration = 'underline'; }}
+                    onMouseLeave={e => { e.currentTarget.style.fill = '#222'; e.currentTarget.style.textDecoration = 'none'; }}
+                  >
+                    {element.value}
+                  </text>
+                </>
+              )}
+              {/* Editable index */}
+              {isEditingIndex ? (
+                <foreignObject x={cellX + cellSize * 0.25} y={cellY + cellSize + 2} width={cellSize * 0.5} height={18}>
+                  <input
+                    type="text"
+                    value={editingCell.value}
+                    autoFocus
+                    style={{ width: '100%', fontSize: 12, fontStyle: 'italic', textAlign: 'center', border: '1px solid #bbb', borderRadius: 4, outline: 'none', background: '#fff', color: '#222', fontFamily: 'sans-serif' }}
+                    onChange={e => setEditingCell({ ...editingCell, value: e.target.value })}
+                    onBlur={() => { updateCell(id, index, 'index', editingCell.value); setEditingCell(null); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { updateCell(id, index, 'index', editingCell.value); setEditingCell(null); } }}
+                  />
+                </foreignObject>
+              ) : (
+                <text
+                  x={cellX + cellSize / 2}
+                  y={cellY + cellSize + 15}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize="12"
+                  fill="#222"
+                  fontFamily="sans-serif"
+                  fontStyle="italic"
+                  style={{ cursor: 'pointer' }}
+                  onMouseEnter={e => { e.currentTarget.style.fill = '#0066cc'; e.currentTarget.style.textDecoration = 'underline'; }}
+                  onMouseLeave={e => { e.currentTarget.style.fill = '#222'; e.currentTarget.style.textDecoration = 'none'; }}
+                  onClick={e => { 
+                    e.stopPropagation(); 
+                    console.log('Cell index clicked:', { arrayId: id, cellIndex: index, index: element.index });
+                    setEditingCell({ arrayId: id, cellIndex: index, field: 'index', value: element.index.toString() }); 
+                  }}
+                >
+                  {element.index}
+                </text>
+              )}
+              {/* Delete button (minus sign) - only show if more than 1 cell */}
+              {elements.length > 1 && (
+                <g
+                  style={{ cursor: 'pointer' }}
+                  onClick={e => { 
+                    e.stopPropagation(); 
+                    console.log('Delete cell clicked:', { arrayId: id, cellIndex: index });
+                    deleteArrayCell(id, index); 
+                  }}
+                >
+                  <circle
+                    cx={cellX + cellSize - 6}
+                    cy={cellY + 6}
+                    r="6"
+                    fill="transparent"
+                    stroke="#999"
+                    strokeWidth="1"
+                  />
+                  <text
+                    x={cellX + cellSize - 6}
+                    y={cellY + 6}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize="10"
+                    fill="#999"
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    −
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+      </g>
+    );
+  };
+
+  return (
+    <div>
+      {/* Canvas and SVG */}
+      <div 
+        ref={canvasRef}
+        className="canvas-container"
+        onMouseDown={handleMouseDown}
+        style={{
+          cursor: activeTool === 'move' ? (dragging ? 'grabbing' : 'grab') : 
+                  activeTool === 'draw' ? 'crosshair' : 
+                  activeTool === 'array' ? 'crosshair' : 'default',
+        }}
+      >
+        <div
+          className="canvas-background"
+          style={{
+            backgroundPosition: `${position.x}px ${position.y}px`,
+            backgroundSize: `${40 * zoom}px ${40 * zoom}px`,
+          }}
+        />
+        <div
+          className="canvas-content"
+          style={{
+            transform: `translate(${position.x}px, ${position.y}px) scale(${zoom})`,
+          }}
+        >
+          {/* Future content like shapes, text, etc. will go here */}
+        </div>
+        
+        {/* SVG layer for drawings and arrays - positioned absolutely in container coordinates */}
+        <svg
+          width="100%"
+          height="100%"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            pointerEvents: 'none',
+            overflow: 'visible'
+          }}
+        >
+          <g transform={`translate(${position.x}, ${position.y}) scale(${zoom})`}>
+            {/* Render completed strokes */}
+            {strokes.map((stroke) => (
+              <path
+                key={stroke.id}
+                d={createPath(stroke.points)}
+                stroke={stroke.color}
+                strokeWidth={stroke.width / zoom}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ))}
+            
+            {/* Render current stroke being drawn */}
+            {isDrawing && currentStroke.length > 1 && (
+              <path
+                d={createPath(currentStroke)}
+                stroke="#000000"
+                strokeWidth={2 / zoom}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+            
+            {/* Render arrays */}
+            {arrays.map(renderArray)}
+            
+            {/* Render array preview when hovering */}
+            {activeTool === 'array' && arrayPreview && (
+              <g opacity="0.6">
+                {renderArray(createDefaultArray(arrayPreview.x, arrayPreview.y))}
+              </g>
+            )}
+          </g>
+        </svg>
+      </div>
     </div>
   );
 };
