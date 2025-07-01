@@ -22,7 +22,7 @@ const DOODLE_ICON = (
 
 const Canvas: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const { activeTool, zoom, position, setPosition, strokes, addStroke, arrays, addArray, updateArrayStyle, setActiveTool, setArrays } = useCanvas();
+  const { activeTool, zoom, position, setPosition, strokes, addStroke, arrays, addArray, updateArrayStyle, setActiveTool, setArrays, stacks, addStack, updateStackStyle, setStacks } = useCanvas();
   const [dragging, setDragging] = useState(false);
   const [start, setStart] = useState({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
@@ -36,6 +36,15 @@ const Canvas: React.FC = () => {
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isActuallyDragging, setIsActuallyDragging] = useState(false);
   const [editingCell, setEditingCell] = useState<null | { arrayId: string; cellIndex: number; field: 'value' | 'index'; value: string }> (null);
+  const [isPlacingStack, setIsPlacingStack] = useState(false);
+  const [stackPreview, setStackPreview] = useState<{ x: number; y: number } | null>(null);
+  const [hoveredStackId, setHoveredStackId] = useState<string | null>(null);
+  const [openStackPopoverId, setOpenStackPopoverId] = useState<string | null>(null);
+  const [stackPopoverHover, setStackPopoverHover] = useState<string | null>(null);
+  const [draggingStackId, setDraggingStackId] = useState<string | null>(null);
+  const [stackDragOffset, setStackDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isActuallyDraggingStack, setIsActuallyDraggingStack] = useState(false);
+  const [editingStackCell, setEditingStackCell] = useState<null | { stackId: string; cellIndex: number; field: 'value'; value: string }> (null);
 
   // Close popover on outside click
   useEffect(() => {
@@ -83,6 +92,38 @@ const Canvas: React.FC = () => {
     };
   }, [draggingArrayId, dragOffset, arrays, setArrays, position.x, position.y, zoom]);
 
+  // Handle stack dragging
+  useEffect(() => {
+    if (!draggingStackId) return;
+    let moved = false;
+    const handleMouseMove = (e: MouseEvent) => {
+      moved = true;
+      setIsActuallyDraggingStack(true);
+      const stack = stacks.find(s => s.id === draggingStackId);
+      if (!stack) return;
+      const containerRect = canvasRef.current?.getBoundingClientRect();
+      if (!containerRect) return;
+      const mouseX = e.clientX - containerRect.left;
+      const mouseY = e.clientY - containerRect.top;
+      const newX = (mouseX - stackDragOffset.x - position.x) / zoom;
+      const newY = (mouseY - stackDragOffset.y - position.y) / zoom;
+      setStacks(stacks.map(s => s.id === draggingStackId ? { ...s, x: newX, y: newY } : s));
+    };
+    const handleMouseUp = (e: MouseEvent) => {
+      setDraggingStackId(null);
+      setTimeout(() => setIsActuallyDraggingStack(false), 100);
+      if (moved) {
+        window.getSelection()?.removeAllRanges();
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggingStackId, stackDragOffset, stacks, setStacks, position.x, position.y, zoom]);
+
   const getRelativePos = (e: React.MouseEvent | MouseEvent) => {
     const containerRect = canvasRef.current?.getBoundingClientRect();
     if (!containerRect) return { x: 0, y: 0 };
@@ -101,7 +142,7 @@ const Canvas: React.FC = () => {
   const createDefaultArray = (x: number, y: number) => {
     const cellSize = 60;
     const defaultElements = [
-      { value: '1', index: 0 },
+      { value: '', index: 0 },
     ];
     return {
       id: Date.now().toString(),
@@ -180,6 +221,11 @@ const Canvas: React.FC = () => {
       const newArray = createDefaultArray(pos.x, pos.y);
       addArray(newArray);
       setActiveTool('move');
+    } else if (activeTool === 'stack') {
+      const pos = getRelativePos(e);
+      const newStack = createDefaultStack(pos.x, pos.y);
+      addStack(newStack);
+      setActiveTool('move');
     }
   };
 
@@ -192,6 +238,9 @@ const Canvas: React.FC = () => {
     } else if (activeTool === 'array') {
       const pos = getRelativePos(e);
       setArrayPreview(pos);
+    } else if (activeTool === 'stack') {
+      const pos = getRelativePos(e);
+      setStackPreview(pos);
     }
   };
 
@@ -363,7 +412,7 @@ const Canvas: React.FC = () => {
           />
           {/* Minimalistic doodle-style container (slightly wavy rectangle, no fill) */}
           <path
-            d={`M${x+2},${y+2} Q${x+width/2},${y-4} ${x+width-2},${y+2} Q${x+width+4},${y+height/2} ${x+width-2},${y+height-2} Q${x+width/2},${y+height+4} ${x+2},${y+height-2} Q${x-4},${y+height/2} ${x+2},${y+2}`}
+            d={`M${x+4},${y+2} L${x+width-4},${y-2} Q${x+width+2},${y+height/2} ${x+width-2},${y+height-4} L${x+4},${y+height-2} Q${x-2},${y+height/2} ${x+4},${y+2}`}
             fill="none"
             stroke="#222"
             strokeWidth="1.2"
@@ -380,7 +429,7 @@ const Canvas: React.FC = () => {
               <g key={index}>
                 {/* Slightly wavy cell border */}
                 <path
-                  d={`M${cellX+2},${cellY+2} Q${cellX+cellSize/2},${cellY-2} ${cellX+cellSize-2},${cellY+2} Q${cellX+cellSize+2},${cellY+cellSize/2} ${cellX+cellSize-2},${cellY+cellSize-2} Q${cellX+cellSize/2},${cellY+cellSize+2} ${cellX+2},${cellY+cellSize-2} Q${cellX-2},${cellY+cellSize/2} ${cellX+2},${cellY+2}`}
+                  d={`M${cellX+4},${cellY+2} L${cellX+cellSize-4},${cellY-2} Q${cellX+cellSize+2},${cellY+cellSize/2} ${cellX+cellSize-2},${cellY+cellSize-4} L${cellX+4},${cellY+cellSize-2} Q${cellX-2},${cellY+cellSize/2} ${cellX+4},${cellY+2}`}
                   fill="none"
                   stroke="#222"
                   strokeWidth="1"
@@ -511,7 +560,7 @@ const Canvas: React.FC = () => {
                 onClick={e => { e.stopPropagation(); addArrayCell(id); }}
               >
                 <path
-                  d={`M${ghostCellX+2},${ghostCellY+2} Q${ghostCellX+cellSize/2},${ghostCellY-2} ${ghostCellX+cellSize-2},${ghostCellY+2} Q${ghostCellX+cellSize+2},${ghostCellY+cellSize/2} ${ghostCellX+cellSize-2},${ghostCellY+cellSize-2} Q${ghostCellX+cellSize/2},${ghostCellY+cellSize+2} ${ghostCellX+2},${ghostCellY+cellSize-2} Q${ghostCellX-2},${ghostCellY+cellSize/2} ${ghostCellX+2},${ghostCellY+2}`}
+                  d={`M${ghostCellX+4},${ghostCellY+2} L${ghostCellX+cellSize-4},${ghostCellY-2} Q${ghostCellX+cellSize+2},${ghostCellY+cellSize/2} ${ghostCellX+cellSize-2},${ghostCellY+cellSize-4} L${ghostCellX+4},${ghostCellY+cellSize-2} Q${ghostCellX-2},${ghostCellY+cellSize/2} ${ghostCellX+4},${ghostCellY+2}`}
                   fill="none"
                   stroke="#999"
                   strokeWidth="1"
@@ -567,7 +616,7 @@ const Canvas: React.FC = () => {
                 y={cellY}
                 width={cellSize}
                 height={cellSize}
-                fill="none"
+                fill="white"
                 stroke="#222"
                 strokeWidth="1"
               />
@@ -691,6 +740,432 @@ const Canvas: React.FC = () => {
     );
   };
 
+  const createDefaultStack = (x: number, y: number) => {
+    const cellWidth = 100; // wider for rectangular look
+    const cellHeight = 60;
+    const defaultElements = [
+      { value: '', index: 0 },
+    ];
+    return {
+      id: Date.now().toString() + '-stack',
+      x,
+      y,
+      elements: defaultElements,
+      width: cellWidth,
+      height: defaultElements.length * cellHeight,
+      cellSize: cellWidth, // for compatibility with rest of code
+      cellWidth,
+      cellHeight,
+      style: 'textbook' as 'textbook',
+    };
+  };
+
+  const addStackCell = (stackId: string) => {
+    const stack = stacks.find(s => s.id === stackId);
+    if (!stack) return;
+    const maxIndex = Math.max(...stack.elements.map(el => el.index), -1);
+    const newIndex = maxIndex + 1;
+    const newElements = [
+      ...stack.elements,
+      { value: '', index: newIndex },
+    ];
+    const newHeight = newElements.length * stack.cellSize;
+    const updated = stacks.map(s => s.id === stackId ? { ...s, elements: newElements, height: newHeight } : s);
+    setStacks(updated);
+  };
+
+  const deleteStackCell = (stackId: string, cellIndex: number) => {
+    const stack = stacks.find(s => s.id === stackId);
+    if (!stack) return;
+    // Allow deleting even if only one cell remains
+    const newElements = stack.elements.filter((_, index) => index !== cellIndex);
+    // Update indices for remaining elements
+    const updatedElements = newElements.map((el, index) => ({ ...el, index }));
+    const newHeight = updatedElements.length * (typeof (stack as any).cellHeight === 'number' ? (stack as any).cellHeight : stack.cellSize);
+    const updated = stacks.map(s => s.id === stackId ? { ...s, elements: updatedElements, height: newHeight } : s);
+    setStacks(updated);
+  };
+
+  const updateStackCell = (stackId: string, cellIndex: number, newValue: string) => {
+    setStacks(stacks.map(stack => {
+      if (stack.id !== stackId) return stack;
+      const newElements = stack.elements.map((el, idx) => {
+        if (idx !== cellIndex) return el;
+        return { ...el, value: newValue };
+      });
+      return { ...stack, elements: newElements };
+    }));
+  };
+
+  // Stack rendering (copied from array, but vertical and minimalistic)
+  const renderStack = (stack: any, stackIdx: number, stacksArr: any[]) => {
+    const { x, y, elements, cellWidth, cellHeight, style, id } = stack;
+    // Place ghost cell and palette at the top
+    const ghostCellX = x;
+    const ghostCellY = y - cellHeight;
+    const iconX = x + cellWidth / 2 - 12;
+    const iconY = ghostCellY - 32; // above the ghost cell
+    const popoverX = iconX + 28;
+    const popoverY = iconY - 8;
+    const showPalette = hoveredStackId === id;
+    const showPopover = openStackPopoverId === id;
+    const paletteButton = (
+      <foreignObject x={iconX} y={iconY} width={24} height={24} style={{ overflow: 'visible', cursor: 'pointer' }}>
+        <div
+          style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 12, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.10)', border: '1px solid #eee' }}
+          onMouseEnter={() => setOpenStackPopoverId(id)}
+          onMouseLeave={() => setTimeout(() => { if (!stackPopoverHover) setOpenStackPopoverId(null); }, 100) }
+        >
+          {PALETTE_ICON}
+        </div>
+      </foreignObject>
+    );
+    const stylePopover = openStackPopoverId === id && (
+      <foreignObject x={popoverX} y={popoverY} width={170} height={90} className="array-style-popover" style={{ overflow: 'visible', zIndex: 10 }}>
+        <div
+          style={{ minWidth: 150, background: '#fff', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.13)', border: '1px solid #eee', padding: '12px 16px', fontSize: 14 }}
+          onMouseEnter={() => setStackPopoverHover(id)}
+          onMouseLeave={() => { setStackPopoverHover(null); setOpenStackPopoverId(null); }}
+        >
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10, color: '#222' }}>Stack Style</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: style === 'textbook' ? '#f3f4f6' : 'transparent' }}>
+            <input type="radio" name={`stack-style-${id}`} value="textbook" checked={style === 'textbook'} onChange={() => updateStackStyle(id, 'textbook')} style={{ accentColor: '#2563eb' }} />
+            <span style={{ fontWeight: 500, color: '#222' }}>Textbook Style</span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: style === 'doodle' ? '#f3f4f6' : 'transparent' }}>
+            <input type="radio" name={`stack-style-${id}`} value="doodle" checked={style === 'doodle'} onChange={() => updateStackStyle(id, 'doodle')} style={{ accentColor: '#2563eb' }} />
+            <span style={{ fontWeight: 500, color: '#222' }}>Doodle Style</span>
+          </label>
+        </div>
+      </foreignObject>
+    );
+    const handleGroupMouseEnter = () => setHoveredStackId(id);
+    const handleGroupMouseLeave = () => setHoveredStackId(current => (current === id ? null : current));
+    const ghostCell = (
+      <g
+        style={{ cursor: 'pointer' }}
+        onClick={e => { e.stopPropagation(); addStackCell(id); }}
+      >
+        {style === 'doodle' ? (
+          <path
+            d={`M${ghostCellX+4},${ghostCellY+2} L${ghostCellX+cellWidth-4},${ghostCellY-2} Q${ghostCellX+cellWidth+2},${ghostCellY+cellHeight/2} ${ghostCellX+cellWidth-2},${ghostCellY+cellHeight-4} L${ghostCellX+4},${ghostCellY+cellHeight-2} Q${ghostCellX-2},${ghostCellY+cellHeight/2} ${ghostCellX+4},${ghostCellY+2}`}
+            fill="none"
+            stroke="#999"
+            strokeWidth="1"
+          />
+        ) : (
+          <rect
+            x={ghostCellX}
+            y={ghostCellY}
+            width={cellWidth}
+            height={cellHeight}
+            fill="white"
+            stroke="#999"
+            strokeWidth="1"
+            rx="4"
+          />
+        )}
+        <text
+          x={ghostCellX + cellWidth / 2}
+          y={ghostCellY + cellHeight / 2 + 4}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize="24"
+          fill="#999"
+          fontFamily="sans-serif"
+          fontStyle="italic"
+        >
+          +
+        </text>
+      </g>
+    );
+    const handleStackMouseDown = (e: React.MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.closest('.array-style-popover') ||
+        (target.tagName === 'text') ||
+        (target.tagName === 'tspan') ||
+        (target.tagName === 'INPUT') ||
+        (target.closest('foreignObject'))
+      ) {
+        return;
+      }
+      if (activeTool !== 'move') {
+        return;
+      }
+      if (e.button !== 0) return;
+      const containerRect = canvasRef.current?.getBoundingClientRect();
+      if (!containerRect) return;
+      const mouseX = e.clientX - containerRect.left;
+      const mouseY = e.clientY - containerRect.top;
+      setDraggingStackId(id);
+      setStackDragOffset({ x: mouseX - (x * zoom + position.x), y: mouseY - (y * zoom + position.y) });
+    };
+    const dragging = draggingStackId === id && isActuallyDraggingStack;
+    const groupStyle: React.CSSProperties = {
+      pointerEvents: 'auto',
+      cursor: 'move',
+      filter: dragging ? 'drop-shadow(0 4px 16px rgba(0,0,0,0.18))' : undefined,
+      transition: dragging ? 'none' : 'filter 0.18s',
+      zIndex: dragging ? 10 : undefined,
+      userSelect: dragging ? 'none' : undefined,
+    };
+    if (style === 'doodle') {
+      if (elements.length === 0) {
+        return (
+          <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleStackMouseDown}>
+            {ghostCell}
+            {paletteButton}
+            {stylePopover}
+          </g>
+        );
+      }
+      return (
+        <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleStackMouseDown}>
+          {/* Place ghost cell and palette at the top */}
+          {ghostCell}
+          {paletteButton}
+          {stylePopover}
+          {/* Transparent background for dragging */}
+          <rect
+            x={x}
+            y={y}
+            width={cellWidth}
+            height={cellHeight}
+            fill="transparent"
+            stroke="none"
+          />
+          {/* Minimalistic doodle-style container (vertical, wavy rectangle) */}
+          <path
+            d={`M${x+4},${y+2} L${x+cellWidth-4},${y-2} Q${x+cellWidth+2},${y+cellHeight/2} ${x+cellWidth-2},${y+cellHeight-4} L${x+4},${y+cellHeight-2} Q${x-2},${y+cellHeight/2} ${x+4},${y+2}`}
+            fill="none"
+            stroke="#222"
+            strokeWidth="1.2"
+          />
+          {/* Minimalistic doodle-style cells (vertical, no fill) */}
+          {elements.map((element: any, index: number) => {
+            const cellX = x;
+            const cellY = y + (elements.length - 1 - index) * cellHeight;
+            const isEditingValue = editingStackCell && editingStackCell.stackId === id && editingStackCell.cellIndex === index && editingStackCell.field === 'value';
+            // In renderStack, inside elements.map, for the most recent stack, show the minus sign only on the cell with the highest index
+            const isMostRecentStack = stackIdx === stacksArr.length - 1;
+            const maxIndex = Math.max(-1, ...elements.map((el: any) => el.index));
+            return (
+              <g key={index}>
+                {/* Slightly wavy cell border */}
+                <path
+                  d={`M${cellX+4},${cellY+2} L${cellX+cellWidth-4},${cellY-2} Q${cellX+cellWidth+2},${cellY+cellHeight/2} ${cellX+cellWidth-2},${cellY+cellHeight-4} L${cellX+4},${cellY+cellHeight-2} Q${cellX-2},${cellY+cellHeight/2} ${cellX+4},${cellY+2}`}
+                  fill="none"
+                  stroke="#222"
+                  strokeWidth="1"
+                />
+                {/* Editable value */}
+                {isEditingValue ? (
+                  <foreignObject x={cellX + cellWidth * 0.1} y={cellY + cellHeight * 0.25} width={cellWidth * 0.8} height={cellHeight * 0.5}>
+                    <input
+                      type="text"
+                      value={editingStackCell.value}
+                      autoFocus
+                      style={{ width: '100%', fontSize: 16, fontStyle: 'italic', textAlign: 'center', border: '1px solid #bbb', borderRadius: 4, outline: 'none', background: '#fff', color: '#222', fontFamily: 'sans-serif' }}
+                      onChange={e => setEditingStackCell({ ...editingStackCell, value: e.target.value })}
+                      onBlur={() => { updateStackCell(id, index, editingStackCell.value); setEditingStackCell(null); }}
+                      onKeyDown={e => { if (e.key === 'Enter') { updateStackCell(id, index, editingStackCell.value); setEditingStackCell(null); } }}
+                    />
+                  </foreignObject>
+                ) : (
+                  <>
+                    {/* Transparent background for easier clicking */}
+                    <rect
+                      x={cellX + cellWidth * 0.1}
+                      y={cellY + cellHeight * 0.1}
+                      width={cellWidth * 0.8}
+                      height={cellHeight * 0.8}
+                      fill="transparent"
+                      stroke="none"
+                      style={{ cursor: 'pointer' }}
+                      onClick={e => { 
+                        e.stopPropagation(); 
+                        setEditingStackCell({ stackId: id, cellIndex: index, field: 'value', value: element.value }); 
+                      }}
+                    />
+                    <text
+                      x={cellX + cellWidth / 2}
+                      y={cellY + cellHeight / 2 + 5}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize="16"
+                      fontStyle="italic"
+                      fill="#222"
+                      fontFamily="sans-serif"
+                      style={{ cursor: 'pointer', pointerEvents: 'none' }}
+                    >
+                      {element.value}
+                    </text>
+                  </>
+                )}
+                {/* Delete button (minus sign) - only show if more than 1 cell and this is the topmost cell */}
+                {element.index === maxIndex && (
+                  <g
+                    style={{ cursor: 'pointer' }}
+                    onClick={e => { 
+                      e.stopPropagation(); 
+                      deleteStackCell(id, index); 
+                    }}
+                  >
+                    <circle
+                      cx={cellX + cellWidth - 6}
+                      cy={cellY + 6}
+                      r="6"
+                      fill="transparent"
+                      stroke="#999"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={cellX + cellWidth - 6}
+                      y={cellY + 6}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize="10"
+                      fill="#999"
+                      style={{ pointerEvents: 'none' }}
+                    >
+                      −
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+        </g>
+      );
+    }
+    // Textbook style (default)
+    if (elements.length === 0) {
+      return (
+        <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleStackMouseDown}>
+          {ghostCell}
+          {paletteButton}
+          {stylePopover}
+        </g>
+      );
+    }
+    return (
+      <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleStackMouseDown}>
+        {/* Place ghost cell and palette at the top */}
+        {ghostCell}
+        {paletteButton}
+        {stylePopover}
+        {/* Stack container */}
+        <rect
+          x={x}
+          y={y}
+          width={cellWidth}
+          height={cellHeight}
+          fill="white"
+          stroke="#222"
+          strokeWidth="2"
+          rx="4"
+        />
+        {/* Stack elements (vertical) */}
+        {elements.map((element: any, index: number) => {
+          const cellX = x;
+          const cellY = y + (elements.length - 1 - index) * cellHeight;
+          const isEditingValue = editingStackCell && editingStackCell.stackId === id && editingStackCell.cellIndex === index && editingStackCell.field === 'value';
+          // Before elements.map for textbook style
+          const maxIndex = Math.max(-1, ...elements.map((el: any) => el.index));
+          return (
+            <g key={index}>
+              {/* Cell border */}
+              <rect
+                x={cellX}
+                y={cellY}
+                width={cellWidth}
+                height={cellHeight}
+                fill="white"
+                stroke="#222"
+                strokeWidth="1"
+              />
+              {/* Editable value */}
+              {isEditingValue ? (
+                <foreignObject x={cellX + cellWidth * 0.1} y={cellY + cellHeight * 0.25} width={cellWidth * 0.8} height={cellHeight * 0.5}>
+                  <input
+                    type="text"
+                    value={editingStackCell.value}
+                    autoFocus
+                    style={{ width: '100%', fontSize: 16, fontStyle: 'italic', textAlign: 'center', border: '1px solid #bbb', borderRadius: 4, outline: 'none', background: '#fff', color: '#222', fontFamily: 'sans-serif' }}
+                    onChange={e => setEditingStackCell({ ...editingStackCell, value: e.target.value })}
+                    onBlur={() => { updateStackCell(id, index, editingStackCell.value); setEditingStackCell(null); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { updateStackCell(id, index, editingStackCell.value); setEditingStackCell(null); } }}
+                  />
+                </foreignObject>
+              ) : (
+                <>
+                  {/* Transparent background for easier clicking */}
+                  <rect
+                    x={cellX + cellWidth * 0.1}
+                    y={cellY + cellHeight * 0.1}
+                    width={cellWidth * 0.8}
+                    height={cellHeight * 0.8}
+                    fill="transparent"
+                    stroke="none"
+                    style={{ cursor: 'pointer' }}
+                    onClick={e => { 
+                      e.stopPropagation(); 
+                      setEditingStackCell({ stackId: id, cellIndex: index, field: 'value', value: element.value }); 
+                    }}
+                  />
+                  <text
+                    x={cellX + cellWidth / 2}
+                    y={cellY + cellHeight / 2 + 5}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize="16"
+                    fontStyle="italic"
+                    fill="#222"
+                    fontFamily="sans-serif"
+                    style={{ cursor: 'pointer', pointerEvents: 'none' }}
+                  >
+                    {element.value}
+                  </text>
+                </>
+              )}
+              {/* Delete button (minus sign) - only show if more than 1 cell and this is the topmost cell */}
+              {element.index === maxIndex && (
+                <g
+                  style={{ cursor: 'pointer' }}
+                  onClick={e => { 
+                    e.stopPropagation(); 
+                    deleteStackCell(id, index); 
+                  }}
+                >
+                  <circle
+                    cx={cellX + cellWidth - 6}
+                    cy={cellY + 6}
+                    r="6"
+                    fill="transparent"
+                    stroke="#999"
+                    strokeWidth="1"
+                  />
+                  <text
+                    x={cellX + cellWidth - 6}
+                    y={cellY + 6}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize="10"
+                    fill="#999"
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    −
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+      </g>
+    );
+  };
+
   return (
     <div>
       {/* Canvas and SVG */}
@@ -701,7 +1176,8 @@ const Canvas: React.FC = () => {
         style={{
           cursor: activeTool === 'move' ? (dragging ? 'grabbing' : 'grab') : 
                   activeTool === 'draw' ? 'crosshair' : 
-                  activeTool === 'array' ? 'crosshair' : 'default',
+                  activeTool === 'array' ? 'crosshair' : 
+                  activeTool === 'stack' ? 'crosshair' : 'default',
         }}
       >
         <div
@@ -760,11 +1236,19 @@ const Canvas: React.FC = () => {
             
             {/* Render arrays */}
             {arrays.map(renderArray)}
+            {/* Render stacks */}
+            {stacks.map((stack, idx) => renderStack(stack, idx, stacks))}
             
             {/* Render array preview when hovering */}
             {activeTool === 'array' && arrayPreview && (
               <g opacity="0.6">
                 {renderArray(createDefaultArray(arrayPreview.x, arrayPreview.y))}
+              </g>
+            )}
+            {/* Render stack preview when hovering */}
+            {activeTool === 'stack' && stackPreview && (
+              <g opacity="0.6">
+                {renderStack(createDefaultStack(stackPreview.x, stackPreview.y), 0, stacks)}
               </g>
             )}
           </g>

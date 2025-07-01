@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-type Tool = 'move' | 'draw' | 'text' | 'shape' | 'datastructures' | 'array';
+type Tool = 'move' | 'draw' | 'text' | 'shape' | 'datastructures' | 'array' | 'stack';
 
 interface DrawingStroke {
   id: string;
@@ -27,6 +27,18 @@ interface ArrayDataStructure {
   style: 'textbook' | 'doodle';
 }
 
+type StackElement = { value: string; index: number };
+interface StackDataStructure {
+  id: string;
+  x: number;
+  y: number;
+  elements: StackElement[];
+  width: number;
+  height: number;
+  cellSize: number;
+  style: 'textbook' | 'doodle';
+}
+
 interface CanvasContextType {
   activeTool: Tool;
   setActiveTool: (tool: Tool) => void;
@@ -41,6 +53,10 @@ interface CanvasContextType {
   setArrays: (arrays: ArrayDataStructure[]) => void;
   addArray: (array: ArrayDataStructure) => void;
   updateArrayStyle: (id: string, style: 'textbook' | 'doodle') => void;
+  stacks: StackDataStructure[];
+  setStacks: (stacks: StackDataStructure[]) => void;
+  addStack: (stack: StackDataStructure) => void;
+  updateStackStyle: (id: string, style: 'textbook' | 'doodle') => void;
 }
 
 const CanvasContext = createContext<CanvasContextType | undefined>(undefined);
@@ -51,6 +67,7 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [strokes, setStrokes] = useState<DrawingStroke[]>([]);
   const [arrays, setArrays] = useState<ArrayDataStructure[]>([]);
+  const [stacks, setStacks] = useState<StackDataStructure[]>([]);
 
   const addStroke = (stroke: DrawingStroke) => {
     setStrokes(prev => [...prev, stroke]);
@@ -62,6 +79,14 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const updateArrayStyle = (id: string, style: 'textbook' | 'doodle') => {
     setArrays(prev => prev.map(arr => arr.id === id ? { ...arr, style } : arr));
+  };
+
+  const addStack = (stack: StackDataStructure) => {
+    setStacks(prev => [...prev, stack]);
+  };
+
+  const updateStackStyle = (id: string, style: 'textbook' | 'doodle') => {
+    setStacks(prev => prev.map(stack => stack.id === id ? { ...stack, style } : stack));
   };
 
   return (
@@ -80,6 +105,10 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setArrays,
         addArray,
         updateArrayStyle,
+        stacks,
+        setStacks,
+        addStack,
+        updateStackStyle,
       }}
     >
       {children}

@@ -20,6 +20,8 @@ const Toolbar = () => {
         return '/icons/listicon.png';
       case 'binarytree':
         return '/icons/treeicon.png';
+      case 'stack':
+        return '/icons/stackicon.png';
       default:
         return '/icons/DSicon.png';
     }
@@ -33,6 +35,8 @@ const Toolbar = () => {
         return 'Linked List';
       case 'binarytree':
         return 'Binary Tree';
+      case 'stack':
+        return 'Stack';
       default:
         return 'Data Structures';
     }
@@ -64,6 +68,8 @@ const Toolbar = () => {
     } else if (type === 'binarytree') {
       // Future: setActiveTool('binarytree');
       console.log('Binary tree tool not implemented yet');
+    } else if (type === 'stack') {
+      setActiveTool('stack');
     }
   };
 
@@ -165,6 +171,20 @@ const Toolbar = () => {
                 className={styles.dropdownIcon}
               />
               <span className={styles.dropdownLabel}>Binary Tree</span>
+            </div>
+            
+            <div 
+              className={styles.dropdownItem}
+              onClick={() => handleDataStructureSelect('stack')}
+            >
+              <Image
+                src="/icons/stackicon.png"
+                alt="Stack"
+                width={32}
+                height={32}
+                className={styles.dropdownIcon}
+              />
+              <span className={styles.dropdownLabel}>Stack</span>
             </div>
           </div>
         )}
