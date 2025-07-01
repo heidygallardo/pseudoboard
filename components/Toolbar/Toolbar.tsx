@@ -20,6 +20,8 @@ const Toolbar = () => {
         return '/icons/listicon.png';
       case 'binarytree':
         return '/icons/treeicon.png';
+      case 'stack':
+        return '/icons/stackicon.png';
       default:
         return '/icons/DSicon.png';
     }
@@ -33,6 +35,8 @@ const Toolbar = () => {
         return 'Linked List';
       case 'binarytree':
         return 'Binary Tree';
+      case 'stack':
+        return 'Stack';
       default:
         return 'Data Structures';
     }
@@ -54,7 +58,19 @@ const Toolbar = () => {
     console.log(`Selected: ${type}`);
     setSelectedDataStructure(type);
     setShowDataStructureDropdown(false);
-    // Future: Add data structure to canvas
+    
+    // Set the appropriate tool based on selection
+    if (type === 'array') {
+      setActiveTool('array');
+    } else if (type === 'linkedlist') {
+      // Future: setActiveTool('linkedlist');
+      console.log('Linked list tool not implemented yet');
+    } else if (type === 'binarytree') {
+      // Future: setActiveTool('binarytree');
+      console.log('Binary tree tool not implemented yet');
+    } else if (type === 'stack') {
+      setActiveTool('stack');
+    }
   };
 
   // Close dropdown when clicking outside
@@ -107,7 +123,7 @@ const Toolbar = () => {
         <Image
           src={getDataStructureIcon()}
           alt={getDataStructureLabel()}
-          className={`${styles.toolbarIcon} ${showDataStructureDropdown ? styles.active : ''}`}
+          className={`${styles.toolbarIcon} ${(activeTool === 'array' || showDataStructureDropdown) ? styles.active : ''}`}
           width={40}
           height={40}
           onClick={handleDataStructureClick}
@@ -155,6 +171,20 @@ const Toolbar = () => {
                 className={styles.dropdownIcon}
               />
               <span className={styles.dropdownLabel}>Binary Tree</span>
+            </div>
+            
+            <div 
+              className={styles.dropdownItem}
+              onClick={() => handleDataStructureSelect('stack')}
+            >
+              <Image
+                src="/icons/stackicon.png"
+                alt="Stack"
+                width={32}
+                height={32}
+                className={styles.dropdownIcon}
+              />
+              <span className={styles.dropdownLabel}>Stack</span>
             </div>
           </div>
         )}
