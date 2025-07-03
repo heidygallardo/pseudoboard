@@ -1254,8 +1254,9 @@ const Canvas: React.FC = () => {
 
   const deleteQueueCell = (queueId: string, cellIndex: number) => {
     const queue = queues.find(q => q.id === queueId);
-    if (!queue || queue.elements.length <= 1) return;
+    if (!queue) return;
     const newElements = queue.elements.filter((_: any, idx: number) => idx !== cellIndex);
+    // Update indices for remaining elements
     const updatedElements = newElements.map((el: any, idx: number) => ({ ...el, index: idx }));
     const newWidth = updatedElements.length * queue.cellSize;
     setQueues(queues.map(q => q.id === queueId ? { ...q, elements: updatedElements, width: newWidth } : q));
@@ -1384,6 +1385,34 @@ const Canvas: React.FC = () => {
       userSelect: dragging ? 'none' : undefined,
     };
     if (style === 'doodle') {
+      if (elements.length === 0) {
+        const ghostCell = (
+          <g
+            style={{ cursor: 'pointer' }}
+            onClick={e => { e.stopPropagation(); addQueueCell(id); }}
+          >
+            <path
+              d={`M${x+4},${y+2} L${x+60-4},${y-2} Q${x+60+2},${y+30} ${x+60-2},${y+60-4} L${x+4},${y+60-2} Q${x-2},${y+30} ${x+4},${y+2}`}
+              fill="none"
+              stroke="#999"
+              strokeWidth="1"
+            />
+            <text
+              x={x + 30}
+              y={y + 30 + 4}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize="24"
+              fill="#999"
+              fontFamily="sans-serif"
+              fontStyle="italic"
+            >
+              +
+            </text>
+          </g>
+        );
+        return <g key={id} style={{ pointerEvents: 'all' }}>{ghostCell}</g>;
+      }
       return (
         <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleQueueMouseDown}>
           {ghostCell}
@@ -1463,7 +1492,7 @@ const Canvas: React.FC = () => {
                     </text>
                   </>
                 )}
-                {elements.length > 1 && index === elements.length - 1 && (
+                {index === elements.length - 1 && (
                   <g
                     style={{ cursor: 'pointer' }}
                     onClick={e => { e.stopPropagation(); deleteQueueCell(id, index); }}
@@ -1573,7 +1602,7 @@ const Canvas: React.FC = () => {
                   </text>
                 </>
               )}
-              {elements.length > 1 && index === elements.length - 1 && (
+              {index === elements.length - 1 && (
                 <g
                   style={{ cursor: 'pointer' }}
                   onClick={e => { e.stopPropagation(); deleteQueueCell(id, index); }}
