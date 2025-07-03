@@ -1,0 +1,16 @@
+.linkedlist-node {
+  transition: all 0.2s ease;
+}
+
+.linkedlist-node:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.linkedlist-node.textbook {
+  font-family: 'Courier New', monospace;
+}
+
+.linkedlist-node.doodle {
+  font-family: 'Comic Sans MS', cursive;
+} 

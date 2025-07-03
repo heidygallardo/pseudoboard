@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-type Tool = 'move' | 'draw' | 'text' | 'shape' | 'datastructures' | 'array' | 'stack';
+type Tool = 'move' | 'draw' | 'text' | 'shape' | 'datastructures' | 'array' | 'stack' | 'linkedlist';
 
 interface DrawingStroke {
   id: string;
@@ -39,6 +39,20 @@ interface StackDataStructure {
   style: 'textbook' | 'doodle';
 }
 
+interface LinkedListNode {
+  id: string;
+  value: string;
+  next: string | null;
+}
+
+interface LinkedListDataStructure {
+  id: string;
+  x: number;
+  y: number;
+  nodes: LinkedListNode[];
+  style: 'textbook' | 'doodle';
+}
+
 interface CanvasContextType {
   activeTool: Tool;
   setActiveTool: (tool: Tool) => void;
@@ -57,6 +71,10 @@ interface CanvasContextType {
   setStacks: (stacks: StackDataStructure[]) => void;
   addStack: (stack: StackDataStructure) => void;
   updateStackStyle: (id: string, style: 'textbook' | 'doodle') => void;
+  linkedLists: LinkedListDataStructure[];
+  setLinkedLists: (linkedLists: LinkedListDataStructure[]) => void;
+  addLinkedList: (linkedList: LinkedListDataStructure) => void;
+  updateLinkedListStyle: (id: string, style: 'textbook' | 'doodle') => void;
 }
 
 const CanvasContext = createContext<CanvasContextType | undefined>(undefined);
@@ -68,6 +86,7 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [strokes, setStrokes] = useState<DrawingStroke[]>([]);
   const [arrays, setArrays] = useState<ArrayDataStructure[]>([]);
   const [stacks, setStacks] = useState<StackDataStructure[]>([]);
+  const [linkedLists, setLinkedLists] = useState<LinkedListDataStructure[]>([]);
 
   const addStroke = (stroke: DrawingStroke) => {
     setStrokes(prev => [...prev, stroke]);
@@ -87,6 +106,14 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const updateStackStyle = (id: string, style: 'textbook' | 'doodle') => {
     setStacks(prev => prev.map(stack => stack.id === id ? { ...stack, style } : stack));
+  };
+
+  const addLinkedList = (linkedList: LinkedListDataStructure) => {
+    setLinkedLists(prev => [...prev, linkedList]);
+  };
+
+  const updateLinkedListStyle = (id: string, style: 'textbook' | 'doodle') => {
+    setLinkedLists(prev => prev.map(ll => ll.id === id ? { ...ll, style } : ll));
   };
 
   return (
@@ -109,6 +136,10 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setStacks,
         addStack,
         updateStackStyle,
+        linkedLists,
+        setLinkedLists,
+        addLinkedList,
+        updateLinkedListStyle,
       }}
     >
       {children}

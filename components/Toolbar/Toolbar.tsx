@@ -63,8 +63,7 @@ const Toolbar = () => {
     if (type === 'array') {
       setActiveTool('array');
     } else if (type === 'linkedlist') {
-      // Future: setActiveTool('linkedlist');
-      console.log('Linked list tool not implemented yet');
+      setActiveTool('linkedlist');
     } else if (type === 'binarytree') {
       // Future: setActiveTool('binarytree');
       console.log('Binary tree tool not implemented yet');

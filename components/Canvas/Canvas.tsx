@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { useCanvas } from '@/contexts/CanvasContext';
 import './Grid.css';
+import LinkedList from '@/components/DataStructures/LinkedList/LinkedList';
 
 const PALETTE_ICON = (
   <svg width="18" height="18" viewBox="0 0 20 20" fill="none" style={{ display: 'block' }}>
@@ -22,7 +23,7 @@ const DOODLE_ICON = (
 
 const Canvas: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const { activeTool, zoom, position, setPosition, strokes, addStroke, arrays, addArray, updateArrayStyle, setActiveTool, setArrays, stacks, addStack, updateStackStyle, setStacks } = useCanvas();
+  const { activeTool, zoom, position, setPosition, strokes, addStroke, arrays, addArray, updateArrayStyle, setActiveTool, setArrays, stacks, addStack, updateStackStyle, setStacks, linkedLists, addLinkedList, updateLinkedListStyle, setLinkedLists } = useCanvas();
   const [dragging, setDragging] = useState(false);
   const [start, setStart] = useState({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
@@ -45,6 +46,12 @@ const Canvas: React.FC = () => {
   const [stackDragOffset, setStackDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isActuallyDraggingStack, setIsActuallyDraggingStack] = useState(false);
   const [editingStackCell, setEditingStackCell] = useState<null | { stackId: string; cellIndex: number; field: 'value'; value: string }> (null);
+  const [isPlacingLinkedList, setIsPlacingLinkedList] = useState(false);
+  const [linkedListPreview, setLinkedListPreview] = useState<{ x: number; y: number } | null>(null);
+  const [hoveredLinkedListId, setHoveredLinkedListId] = useState<string | null>(null);
+  const [draggingLinkedListId, setDraggingLinkedListId] = useState<string | null>(null);
+  const [linkedListDragOffset, setLinkedListDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isActuallyDraggingLinkedList, setIsActuallyDraggingLinkedList] = useState(false);
 
   // Close popover on outside click
   useEffect(() => {
@@ -123,6 +130,38 @@ const Canvas: React.FC = () => {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [draggingStackId, stackDragOffset, stacks, setStacks, position.x, position.y, zoom]);
+
+  // Handle linked list dragging
+  useEffect(() => {
+    if (!draggingLinkedListId) return;
+    let moved = false;
+    const handleMouseMove = (e: MouseEvent) => {
+      moved = true;
+      setIsActuallyDraggingLinkedList(true);
+      const ll = linkedLists.find(l => l.id === draggingLinkedListId);
+      if (!ll) return;
+      const containerRect = canvasRef.current?.getBoundingClientRect();
+      if (!containerRect) return;
+      const mouseX = e.clientX - containerRect.left;
+      const mouseY = e.clientY - containerRect.top;
+      const newX = (mouseX - linkedListDragOffset.x - position.x) / zoom;
+      const newY = (mouseY - linkedListDragOffset.y - position.y) / zoom;
+      setLinkedLists(linkedLists.map(l => l.id === draggingLinkedListId ? { ...l, x: newX, y: newY } : l));
+    };
+    const handleMouseUp = (e: MouseEvent) => {
+      setDraggingLinkedListId(null);
+      setTimeout(() => setIsActuallyDraggingLinkedList(false), 100);
+      if (moved) {
+        window.getSelection()?.removeAllRanges();
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggingLinkedListId, linkedListDragOffset, linkedLists, setLinkedLists, position.x, position.y, zoom]);
 
   const getRelativePos = (e: React.MouseEvent | MouseEvent) => {
     const containerRect = canvasRef.current?.getBoundingClientRect();
@@ -226,6 +265,11 @@ const Canvas: React.FC = () => {
       const newStack = createDefaultStack(pos.x, pos.y);
       addStack(newStack);
       setActiveTool('move');
+    } else if (activeTool === 'linkedlist') {
+      const pos = getRelativePos(e);
+      const newLinkedList = createDefaultLinkedList(pos.x, pos.y);
+      addLinkedList(newLinkedList);
+      setActiveTool('move');
     }
   };
 
@@ -241,6 +285,9 @@ const Canvas: React.FC = () => {
     } else if (activeTool === 'stack') {
       const pos = getRelativePos(e);
       setStackPreview(pos);
+    } else if (activeTool === 'linkedlist') {
+      const pos = getRelativePos(e);
+      setLinkedListPreview(pos);
     }
   };
 
@@ -760,6 +807,19 @@ const Canvas: React.FC = () => {
     };
   };
 
+  const createDefaultLinkedList = (x: number, y: number) => {
+    const defaultNodes = [
+      { id: Date.now().toString(), value: '', next: null },
+    ];
+    return {
+      id: Date.now().toString() + '-linkedlist',
+      x,
+      y,
+      nodes: defaultNodes,
+      style: 'textbook' as 'textbook',
+    };
+  };
+
   const addStackCell = (stackId: string) => {
     const stack = stacks.find(s => s.id === stackId);
     if (!stack) return;
@@ -794,6 +854,56 @@ const Canvas: React.FC = () => {
         return { ...el, value: newValue };
       });
       return { ...stack, elements: newElements };
+    }));
+  };
+
+  const addLinkedListNode = (linkedListId: string) => {
+    const ll = linkedLists.find(l => l.id === linkedListId);
+    if (!ll) return;
+    
+    const newNodeId = Date.now().toString();
+    const newNodes = [
+      ...ll.nodes,
+      { id: newNodeId, value: '', next: null },
+    ];
+    
+    // Update the previous node's next pointer
+    if (ll.nodes.length > 0) {
+      newNodes[ll.nodes.length - 1].next = newNodeId;
+    }
+    
+    const updated = linkedLists.map(l => l.id === linkedListId ? { ...l, nodes: newNodes } : l);
+    setLinkedLists(updated);
+  };
+
+  const deleteLinkedListNode = (linkedListId: string, nodeId: string) => {
+    const ll = linkedLists.find(l => l.id === linkedListId);
+    if (!ll || ll.nodes.length <= 1) return; // Don't delete if only one node remains
+    
+    const nodeIndex = ll.nodes.findIndex(node => node.id === nodeId);
+    if (nodeIndex === -1) return;
+    
+    const newNodes = ll.nodes.filter(node => node.id !== nodeId);
+    
+    // Update the next pointer of the previous node
+    if (nodeIndex > 0 && nodeIndex < ll.nodes.length - 1) {
+      newNodes[nodeIndex - 1].next = newNodes[nodeIndex].id;
+    } else if (nodeIndex > 0) {
+      newNodes[nodeIndex - 1].next = null;
+    }
+    
+    const updated = linkedLists.map(l => l.id === linkedListId ? { ...l, nodes: newNodes } : l);
+    setLinkedLists(updated);
+  };
+
+  const updateLinkedListNodeValue = (linkedListId: string, nodeId: string, value: string) => {
+    setLinkedLists(linkedLists.map(ll => {
+      if (ll.id !== linkedListId) return ll;
+      const newNodes = ll.nodes.map(node => {
+        if (node.id !== nodeId) return node;
+        return { ...node, value };
+      });
+      return { ...ll, nodes: newNodes };
     }));
   };
 
@@ -1166,6 +1276,8 @@ const Canvas: React.FC = () => {
     );
   };
 
+
+
   return (
     <div>
       {/* Canvas and SVG */}
@@ -1177,7 +1289,8 @@ const Canvas: React.FC = () => {
           cursor: activeTool === 'move' ? (dragging ? 'grabbing' : 'grab') : 
                   activeTool === 'draw' ? 'crosshair' : 
                   activeTool === 'array' ? 'crosshair' : 
-                  activeTool === 'stack' ? 'crosshair' : 'default',
+                  activeTool === 'stack' ? 'crosshair' : 
+                  activeTool === 'linkedlist' ? 'crosshair' : 'default',
         }}
       >
         <div
@@ -1239,6 +1352,8 @@ const Canvas: React.FC = () => {
             {/* Render stacks */}
             {stacks.map((stack, idx) => renderStack(stack, idx, stacks))}
             
+
+            
             {/* Render array preview when hovering */}
             {activeTool === 'array' && arrayPreview && (
               <g opacity="0.6">
@@ -1251,8 +1366,84 @@ const Canvas: React.FC = () => {
                 {renderStack(createDefaultStack(stackPreview.x, stackPreview.y), 0, stacks)}
               </g>
             )}
+            
+            {/* Render linked list preview when hovering */}
+            {activeTool === 'linkedlist' && linkedListPreview && (
+              <g opacity="0.6">
+                <text
+                  x={linkedListPreview.x}
+                  y={linkedListPreview.y - 10}
+                  fontSize="12"
+                  fontWeight="bold"
+                  fill="#666"
+                  fontFamily="sans-serif"
+                >
+                  Linked List
+                </text>
+                <rect
+                  x={linkedListPreview.x}
+                  y={linkedListPreview.y}
+                  width="80"
+                  height="60"
+                  fill="#f0f0f0"
+                  stroke="#666"
+                  strokeWidth="2"
+                  rx="8"
+                />
+                <text
+                  x={linkedListPreview.x + 40}
+                  y={linkedListPreview.y + 34}
+                  fontSize="14"
+                  fill="#666"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                >
+                  null
+                </text>
+              </g>
+            )}
           </g>
         </svg>
+
+        {/* Render linked lists as DOM elements (outside SVG) */}
+        {linkedLists.map((linkedList) => (
+          <div
+            key={linkedList.id}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              transform: `translate(${position.x + linkedList.x * zoom}px, ${position.y + linkedList.y * zoom}px) scale(${zoom})`,
+              transformOrigin: '0 0',
+              pointerEvents: 'auto',
+            }}
+          >
+            <LinkedList
+              linkedList={linkedList}
+              onAddNode={addLinkedListNode}
+              onDeleteNode={deleteLinkedListNode}
+              onUpdateNodeValue={updateLinkedListNodeValue}
+              onStyleChange={updateLinkedListStyle}
+              isHovered={hoveredLinkedListId === linkedList.id}
+              isDragging={draggingLinkedListId === linkedList.id && isActuallyDraggingLinkedList}
+              onMouseDown={(e) => {
+                if (activeTool !== 'move') return;
+                if (e.button !== 0) return;
+                const containerRect = canvasRef.current?.getBoundingClientRect();
+                if (!containerRect) return;
+                const mouseX = e.clientX - containerRect.left;
+                const mouseY = e.clientY - containerRect.top;
+                setDraggingLinkedListId(linkedList.id);
+                setLinkedListDragOffset({ 
+                  x: mouseX - (linkedList.x * zoom + position.x), 
+                  y: mouseY - (linkedList.y * zoom + position.y) 
+                });
+              }}
+              onMouseEnter={() => setHoveredLinkedListId(linkedList.id)}
+              onMouseLeave={() => setHoveredLinkedListId(null)}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
