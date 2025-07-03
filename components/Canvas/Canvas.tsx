@@ -1455,6 +1455,8 @@ const Canvas: React.FC = () => {
       }
       return (
         <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleQueueMouseDown}>
+          {rearLabel}
+          {frontLabel}
           {ghostCell}
           {paletteButton}
           {stylePopover}
@@ -1567,6 +1569,8 @@ const Canvas: React.FC = () => {
     // Textbook style (default)
     return (
       <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleQueueMouseDown}>
+        {rearLabel}
+        {frontLabel}
         {ghostCell}
         {paletteButton}
         {stylePopover}
@@ -1674,6 +1678,73 @@ const Canvas: React.FC = () => {
       </g>
     );
   };
+
+  // Labels: Rear (first cell), Front (last cell)
+  let rearLabel: React.ReactNode = null;
+  let frontLabel: React.ReactNode = null;
+  if (queues.length > 0) {
+    const firstQueue = queues[0];
+    const lastQueue = queues[queues.length - 1];
+    const cellSize = 60;
+    const firstCellX = firstQueue.x;
+    const lastCellX = lastQueue.x + (firstQueue.elements.length - 1) * cellSize;
+    const cellY = firstQueue.y;
+    // Editable label state
+    const isEditingRear = editingQueueCell && editingQueueCell.queueId === firstQueue.id && editingQueueCell.cellIndex === -1;
+    const isEditingFront = editingQueueCell && editingQueueCell.queueId === lastQueue.id && editingQueueCell.cellIndex === -2;
+    rearLabel = isEditingRear ? (
+      <foreignObject x={firstCellX} y={cellY - 38} width={cellSize} height={28}>
+        <input
+          type="text"
+          value={editingQueueCell.value}
+          autoFocus
+          style={{ width: '100%', fontSize: 15, fontWeight: 600, color: '#111', border: '1.5px solid #111', borderRadius: 5, textAlign: 'center', background: '#fff', outline: 'none', fontFamily: 'sans-serif' }}
+          onChange={e => setEditingQueueCell({ ...editingQueueCell, value: e.target.value })}
+          onBlur={() => { updateQueueCell(firstQueue.id, -1, editingQueueCell.value); setEditingQueueCell(null); }}
+          onKeyDown={e => { if (e.key === 'Enter') { updateQueueCell(firstQueue.id, -1, editingQueueCell.value); setEditingQueueCell(null); } }}
+        />
+      </foreignObject>
+    ) : (
+      <text
+        x={firstCellX + cellSize / 2}
+        y={cellY - 16}
+        textAnchor="middle"
+        fontSize="15"
+        fontWeight="600"
+        fill="#111"
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={e => { e.stopPropagation(); setEditingQueueCell({ queueId: firstQueue.id, cellIndex: -1, value: firstQueue.rearLabel || 'Rear' }); }}
+      >
+        {firstQueue.rearLabel || 'Rear'}
+      </text>
+    );
+    frontLabel = isEditingFront ? (
+      <foreignObject x={lastCellX} y={cellY - 38} width={cellSize} height={28}>
+        <input
+          type="text"
+          value={editingQueueCell.value}
+          autoFocus
+          style={{ width: '100%', fontSize: 15, fontWeight: 600, color: '#111', border: '1.5px solid #111', borderRadius: 5, textAlign: 'center', background: '#fff', outline: 'none', fontFamily: 'sans-serif' }}
+          onChange={e => setEditingQueueCell({ ...editingQueueCell, value: e.target.value })}
+          onBlur={() => { updateQueueCell(lastQueue.id, -2, editingQueueCell.value); setEditingQueueCell(null); }}
+          onKeyDown={e => { if (e.key === 'Enter') { updateQueueCell(lastQueue.id, -2, editingQueueCell.value); setEditingQueueCell(null); } }}
+        />
+      </foreignObject>
+    ) : (
+      <text
+        x={lastCellX + cellSize / 2}
+        y={cellY - 16}
+        textAnchor="middle"
+        fontSize="15"
+        fontWeight="600"
+        fill="#111"
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={e => { e.stopPropagation(); setEditingQueueCell({ queueId: lastQueue.id, cellIndex: -2, value: lastQueue.frontLabel || 'Front' }); }}
+      >
+        {lastQueue.frontLabel || 'Front'}
+      </text>
+    );
+  }
 
   return (
     <div>
