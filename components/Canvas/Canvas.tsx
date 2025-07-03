@@ -1275,7 +1275,8 @@ const Canvas: React.FC = () => {
     // Palette icon position (to the right of the ghost cell)
     const ghostCellX = x - cellSize;
     const ghostCellY = y;
-    const iconX = ghostCellX - 32; // 32px to the left of the + button
+    // Move only the paletteButton closer, do not move the + cell
+    const iconX = ghostCellX - 8 - 24; // 8px gap, 24px icon width
     const iconY = y + cellSize / 2 - 12;
     const popoverX = iconX + 28;
     const popoverY = iconY - 8;
@@ -1319,35 +1320,65 @@ const Canvas: React.FC = () => {
     const handleGroupMouseEnter = () => setHoveredQueueId(id);
     const handleGroupMouseLeave = () => setHoveredQueueId(current => (current === id ? null : current));
     // Ghost cell (for adding new cells)
-    const ghostCell = (
-      <g
-        style={{ cursor: 'pointer' }}
-        onClick={e => { e.stopPropagation(); addQueueCell(id); }}
-      >
-        <rect
-          x={ghostCellX}
-          y={ghostCellY}
-          width={cellSize}
-          height={cellSize}
-          fill="transparent"
-          stroke="#999"
-          strokeWidth="1"
-          rx="4"
-        />
-        <text
-          x={ghostCellX + cellSize / 2}
-          y={ghostCellY + cellSize / 2 + 4}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize="24"
-          fill="#999"
-          fontFamily="sans-serif"
-          fontStyle="italic"
+    let ghostCell;
+    if (style === 'doodle') {
+      ghostCell = (
+        <g
+          style={{ cursor: 'pointer' }}
+          onClick={e => { e.stopPropagation(); addQueueCell(id); }}
         >
-          +
-        </text>
-      </g>
-    );
+          {/* Doodle-style wavy rectangle for ghost cell, matching array doodle ghost cell */}
+          <path
+            d={`M${ghostCellX+4},${ghostCellY+2} L${ghostCellX+cellSize-4},${ghostCellY-2} Q${ghostCellX+cellSize+2},${ghostCellY+cellSize/2} ${ghostCellX+cellSize-2},${ghostCellY+cellSize-4} L${ghostCellX+4},${ghostCellY+cellSize-2} Q${ghostCellX-2},${ghostCellY+cellSize/2} ${ghostCellX+4},${ghostCellY+2}`}
+            fill="none"
+            stroke="#999"
+            strokeWidth="1"
+          />
+          <text
+            x={ghostCellX + cellSize / 2}
+            y={ghostCellY + cellSize / 2 + 4}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize="24"
+            fill="#999"
+            fontFamily="sans-serif"
+            fontStyle="italic"
+          >
+            +
+          </text>
+        </g>
+      );
+    } else {
+      ghostCell = (
+        <g
+          style={{ cursor: 'pointer' }}
+          onClick={e => { e.stopPropagation(); addQueueCell(id); }}
+        >
+          <rect
+            x={ghostCellX}
+            y={ghostCellY}
+            width={cellSize}
+            height={cellSize}
+            fill="transparent"
+            stroke="#999"
+            strokeWidth="1"
+            rx="4"
+          />
+          <text
+            x={ghostCellX + cellSize / 2}
+            y={ghostCellY + cellSize / 2 + 4}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize="24"
+            fill="#999"
+            fontFamily="sans-serif"
+            fontStyle="italic"
+          >
+            +
+          </text>
+        </g>
+      );
+    }
     // Drag handlers
     const handleQueueMouseDown = (e: React.MouseEvent) => {
       // Prevent drag if clicking ghost cell or palette/popover or text
@@ -1386,20 +1417,22 @@ const Canvas: React.FC = () => {
     };
     if (style === 'doodle') {
       if (elements.length === 0) {
+        // Use ghostCellX and cellSize from the queue object for consistent position
         const ghostCell = (
           <g
             style={{ cursor: 'pointer' }}
             onClick={e => { e.stopPropagation(); addQueueCell(id); }}
           >
+            {/* Doodle-style wavy rectangle for ghost cell, matching array doodle ghost cell */}
             <path
-              d={`M${x+4},${y+2} L${x+60-4},${y-2} Q${x+60+2},${y+30} ${x+60-2},${y+60-4} L${x+4},${y+60-2} Q${x-2},${y+30} ${x+4},${y+2}`}
+              d={`M${ghostCellX+4},${ghostCellY+2} L${ghostCellX+cellSize-4},${ghostCellY-2} Q${ghostCellX+cellSize+2},${ghostCellY+cellSize/2} ${ghostCellX+cellSize-2},${ghostCellY+cellSize-4} L${ghostCellX+4},${ghostCellY+cellSize-2} Q${ghostCellX-2},${ghostCellY+cellSize/2} ${ghostCellX+4},${ghostCellY+2}`}
               fill="none"
               stroke="#999"
               strokeWidth="1"
             />
             <text
-              x={x + 30}
-              y={y + 30 + 4}
+              x={ghostCellX + cellSize / 2}
+              y={ghostCellY + cellSize / 2 + 4}
               textAnchor="middle"
               dominantBaseline="middle"
               fontSize="24"
@@ -1411,7 +1444,14 @@ const Canvas: React.FC = () => {
             </text>
           </g>
         );
-        return <g key={id} style={{ pointerEvents: 'all' }}>{ghostCell}</g>;
+        // Always show paletteButton and stylePopover to the left of the ghost cell
+        return (
+          <g key={id} style={{ pointerEvents: 'all' }}>
+            {paletteButton}
+            {stylePopover}
+            {ghostCell}
+          </g>
+        );
       }
       return (
         <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleQueueMouseDown}>
