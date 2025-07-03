@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-type Tool = 'move' | 'draw' | 'text' | 'shape' | 'datastructures' | 'array' | 'stack';
+type Tool = 'move' | 'draw' | 'text' | 'shape' | 'datastructures' | 'array' | 'stack' | 'queue';
 
 interface DrawingStroke {
   id: string;
