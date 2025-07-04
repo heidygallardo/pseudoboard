@@ -1265,6 +1265,15 @@ const Canvas: React.FC = () => {
   const updateQueueCell = (queueId: string, cellIndex: number, newValue: string) => {
     setQueues(queues.map(queue => {
       if (queue.id !== queueId) return queue;
+      
+      // Handle special cases for labels (cellIndex -1 for rear, -2 for front)
+      if (cellIndex === -1) {
+        return { ...queue, rearLabel: newValue };
+      } else if (cellIndex === -2) {
+        return { ...queue, frontLabel: newValue };
+      }
+      
+      // Handle regular cell updates
       const newElements = queue.elements.map((el: any, idx: number) => idx === cellIndex ? { ...el, value: newValue } : el);
       return { ...queue, elements: newElements };
     }));
@@ -1689,16 +1698,47 @@ const Canvas: React.FC = () => {
     const firstCellX = firstQueue.x;
     const lastCellX = lastQueue.x + (firstQueue.elements.length - 1) * cellSize;
     const cellY = firstQueue.y;
+    
+    // Check if there's only one cell (rear and front would overlap)
+    const hasOnlyOneCell = firstQueue.elements.length === 1;
+    
+    // Only show labels if there are cells in the queue
+    const hasCells = firstQueue.elements.length > 0;
+    
     // Editable label state
     const isEditingRear = editingQueueCell && editingQueueCell.queueId === firstQueue.id && editingQueueCell.cellIndex === -1;
     const isEditingFront = editingQueueCell && editingQueueCell.queueId === lastQueue.id && editingQueueCell.cellIndex === -2;
-    rearLabel = isEditingRear ? (
+    
+    // Common input styles for both labels
+    const inputStyle = {
+      width: '100%',
+      fontSize: 16,
+      fontWeight: 600,
+      color: '#111',
+      border: '1.5px solid #111',
+      borderRadius: 5,
+      textAlign: 'center' as const,
+      background: '#fff',
+      outline: 'none',
+      fontFamily: 'sans-serif',
+      padding: '2px 4px'
+    };
+    
+    // Common text styles for both labels
+    const textStyle = {
+      cursor: 'pointer' as const,
+      userSelect: 'none' as const,
+      fontSize: 16,
+      fontWeight: 600
+    };
+    
+    rearLabel = hasCells ? (isEditingRear ? (
       <foreignObject x={firstCellX} y={cellY - 38} width={cellSize} height={28}>
         <input
           type="text"
           value={editingQueueCell.value}
           autoFocus
-          style={{ width: '100%', fontSize: 15, fontWeight: 600, color: '#111', border: '1.5px solid #111', borderRadius: 5, textAlign: 'center', background: '#fff', outline: 'none', fontFamily: 'sans-serif' }}
+          style={inputStyle}
           onChange={e => setEditingQueueCell({ ...editingQueueCell, value: e.target.value })}
           onBlur={() => { updateQueueCell(firstQueue.id, -1, editingQueueCell.value); setEditingQueueCell(null); }}
           onKeyDown={e => { if (e.key === 'Enter') { updateQueueCell(firstQueue.id, -1, editingQueueCell.value); setEditingQueueCell(null); } }}
@@ -1709,22 +1749,23 @@ const Canvas: React.FC = () => {
         x={firstCellX + cellSize / 2}
         y={cellY - 16}
         textAnchor="middle"
-        fontSize="15"
+        fontSize="16"
         fontWeight="600"
         fill="#111"
-        style={{ cursor: 'pointer', userSelect: 'none' }}
+        style={textStyle}
         onClick={e => { e.stopPropagation(); setEditingQueueCell({ queueId: firstQueue.id, cellIndex: -1, value: firstQueue.rearLabel || 'Rear' }); }}
       >
         {firstQueue.rearLabel || 'Rear'}
       </text>
-    );
-    frontLabel = isEditingFront ? (
-      <foreignObject x={lastCellX} y={cellY - 38} width={cellSize} height={28}>
+    )) : null;
+    
+    frontLabel = hasCells ? (isEditingFront ? (
+      <foreignObject x={lastCellX} y={cellY - (hasOnlyOneCell ? 66 : 38)} width={cellSize} height={28}>
         <input
           type="text"
           value={editingQueueCell.value}
           autoFocus
-          style={{ width: '100%', fontSize: 15, fontWeight: 600, color: '#111', border: '1.5px solid #111', borderRadius: 5, textAlign: 'center', background: '#fff', outline: 'none', fontFamily: 'sans-serif' }}
+          style={inputStyle}
           onChange={e => setEditingQueueCell({ ...editingQueueCell, value: e.target.value })}
           onBlur={() => { updateQueueCell(lastQueue.id, -2, editingQueueCell.value); setEditingQueueCell(null); }}
           onKeyDown={e => { if (e.key === 'Enter') { updateQueueCell(lastQueue.id, -2, editingQueueCell.value); setEditingQueueCell(null); } }}
@@ -1733,17 +1774,17 @@ const Canvas: React.FC = () => {
     ) : (
       <text
         x={lastCellX + cellSize / 2}
-        y={cellY - 16}
+        y={cellY - (hasOnlyOneCell ? 44 : 16)}
         textAnchor="middle"
-        fontSize="15"
+        fontSize="16"
         fontWeight="600"
         fill="#111"
-        style={{ cursor: 'pointer', userSelect: 'none' }}
+        style={textStyle}
         onClick={e => { e.stopPropagation(); setEditingQueueCell({ queueId: lastQueue.id, cellIndex: -2, value: lastQueue.frontLabel || 'Front' }); }}
       >
         {lastQueue.frontLabel || 'Front'}
       </text>
-    );
+    )) : null;
   }
 
   return (
