@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useRef, useState, useEffect } from 'react';
 import { useCanvas } from '@/contexts/CanvasContext';
 import './Grid.css';
@@ -56,6 +57,10 @@ const Canvas: React.FC = () => {
 
   const updateQueueStyle = (id: string, style: 'textbook' | 'doodle') => {
     setQueues(queues.map(q => q.id === id ? { ...q, style } : q));
+  };
+
+  const updateQueuePosition = (id: string, position: 'front-to-rear' | 'rear-to-front') => {
+    setQueues(queues.map(q => q.id === id ? { ...q, position } : q));
   };
 
   // Close popover on outside click
@@ -1232,6 +1237,7 @@ const Canvas: React.FC = () => {
       height: cellSize,
       cellSize,
       style: 'textbook' as 'textbook',
+      position: 'front-to-rear' as 'front-to-rear',
     };
   };
 
@@ -1268,9 +1274,21 @@ const Canvas: React.FC = () => {
       
       // Handle special cases for labels (cellIndex -1 for rear, -2 for front)
       if (cellIndex === -1) {
-        return { ...queue, rearLabel: newValue };
+        // Determine which label to update based on position
+        const isRearToFront = queue.position === 'rear-to-front';
+        if (isRearToFront) {
+          return { ...queue, rearLabel: newValue };
+        } else {
+          return { ...queue, frontLabel: newValue };
+        }
       } else if (cellIndex === -2) {
-        return { ...queue, frontLabel: newValue };
+        // Determine which label to update based on position
+        const isRearToFront = queue.position === 'rear-to-front';
+        if (isRearToFront) {
+          return { ...queue, frontLabel: newValue };
+        } else {
+          return { ...queue, rearLabel: newValue };
+        }
       }
       
       // Handle regular cell updates
@@ -1281,14 +1299,30 @@ const Canvas: React.FC = () => {
 
   const renderQueue = (queue: any) => {
     const { x, y, elements, cellSize, width, height, style, id } = queue;
-    // Palette icon position (to the right of the ghost cell)
-    const ghostCellX = x - cellSize;
-    const ghostCellY = y;
-    // Move only the paletteButton closer, do not move the + cell
-    const iconX = ghostCellX - 8 - 24; // 8px gap, 24px icon width
-    const iconY = y + cellSize / 2 - 12;
-    const popoverX = iconX + 28;
-    const popoverY = iconY - 8;
+    
+    // Get queue position setting from the current queue being rendered
+    const queuePosition = queue.position || 'front-to-rear';
+    
+    // Calculate ghost cell and palette positions based on queue direction
+    let ghostCellX, ghostCellY, iconX, iconY, popoverX, popoverY;
+    if (queuePosition === 'rear-to-front') {
+      // Rear-to-front: ghost cell and palette to the left of the first cell
+      ghostCellX = x - cellSize;
+      ghostCellY = y;
+      iconX = ghostCellX - 8 - 24; // 8px gap, 24px icon width
+      iconY = y + cellSize / 2 - 12;
+      popoverX = iconX + 28;
+      popoverY = iconY - 8;
+    } else {
+      // Front-to-rear: ghost cell and palette to the right of the last cell
+      ghostCellX = x + elements.length * cellSize;
+      ghostCellY = y;
+      iconX = ghostCellX + cellSize + 8; // move palette to the right of the ghost cell
+      iconY = y + cellSize / 2 - 12;
+      popoverX = iconX + 28;
+      popoverY = iconY - 8;
+    }
+    
     // Show palette icon only on hover
     const showPalette = hoveredQueueId === id;
     // Show popover if openQueuePopoverId === id
@@ -1307,7 +1341,7 @@ const Canvas: React.FC = () => {
     );
     // Popover with style options (show on hover)
     const stylePopover = showPopover && (
-      <foreignObject x={popoverX} y={popoverY} width={170} height={90} className="array-style-popover" style={{ overflow: 'visible', zIndex: 10 }}>
+      <foreignObject x={popoverX} y={popoverY} width={170} height={140} className="array-style-popover" style={{ overflow: 'visible', zIndex: 10 }}>
         <div
           style={{ minWidth: 150, background: '#fff', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.13)', border: '1px solid #eee', padding: '12px 16px', fontSize: 14 }}
           onMouseEnter={() => setQueuePopoverHover(id)}
@@ -1318,9 +1352,19 @@ const Canvas: React.FC = () => {
             <input type="radio" name={`queue-style-${id}`} value="textbook" checked={style === 'textbook'} onChange={() => updateQueueStyle(id, 'textbook')} style={{ accentColor: '#2563eb' }} />
             <span style={{ fontWeight: 500, color: '#222' }}>Textbook Style</span>
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: style === 'doodle' ? '#f3f4f6' : 'transparent' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: style === 'doodle' ? '#f3f4f6' : 'transparent' }}>
             <input type="radio" name={`queue-style-${id}`} value="doodle" checked={style === 'doodle'} onChange={() => updateQueueStyle(id, 'doodle')} style={{ accentColor: '#2563eb' }} />
             <span style={{ fontWeight: 500, color: '#222' }}>Doodle Style</span>
+          </label>
+          
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10, color: '#222', marginTop: 8 }}>Queue Position</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: (queue.position || 'front-to-rear') === 'front-to-rear' ? '#f3f4f6' : 'transparent' }}>
+            <input type="radio" name={`queue-position-${id}`} value="front-to-rear" checked={(queue.position || 'front-to-rear') === 'front-to-rear'} onChange={() => updateQueuePosition(id, 'front-to-rear')} style={{ accentColor: '#2563eb' }} />
+            <span style={{ fontWeight: 500, color: '#222' }}>Front-to-Rear</span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: (queue.position || 'front-to-rear') === 'rear-to-front' ? '#f3f4f6' : 'transparent' }}>
+            <input type="radio" name={`queue-position-${id}`} value="rear-to-front" checked={(queue.position || 'front-to-rear') === 'rear-to-front'} onChange={() => updateQueuePosition(id, 'rear-to-front')} style={{ accentColor: '#2563eb' }} />
+            <span style={{ fontWeight: 500, color: '#222' }}>Rear-to-Front</span>
           </label>
         </div>
       </foreignObject>
@@ -1328,6 +1372,114 @@ const Canvas: React.FC = () => {
     // Mouse event handlers for hover
     const handleGroupMouseEnter = () => setHoveredQueueId(id);
     const handleGroupMouseLeave = () => setHoveredQueueId(current => (current === id ? null : current));
+    
+    // Check if there's only one cell (rear and front would overlap)
+    const hasOnlyOneCell = elements.length === 1;
+    
+    // Only show labels if there are cells in the queue
+    const hasCells = elements.length > 0;
+    
+    // Determine label positions based on queue position setting
+    const isRearToFront = queuePosition === 'rear-to-front';
+    
+
+    
+    // For rear-to-front: Rear on first cell, Front on last cell
+    // For front-to-rear: Front on first cell, Rear on last cell
+    const firstCellX = x;
+    const lastCellX = x + (elements.length - 1) * cellSize;
+    // Keep labels in their original positions, just change the text
+    const rearLabelX = firstCellX;
+    const frontLabelX = lastCellX;
+    const rearLabelY = isRearToFront ? 16 : (hasOnlyOneCell ? 44 : 16);
+    const frontLabelY = isRearToFront ? (hasOnlyOneCell ? 44 : 16) : 16;
+    
+    // For front-to-rear: swap the label texts to match the flipped layout
+    const rearLabelText = isRearToFront ? (queue.rearLabel || 'Rear') : (queue.frontLabel || 'Front');
+    const frontLabelText = isRearToFront ? (queue.frontLabel || 'Front') : (queue.rearLabel || 'Rear');
+    
+    // Editable label state
+    const isEditingRear = editingQueueCell && editingQueueCell.queueId === id && editingQueueCell.cellIndex === -1;
+    const isEditingFront = editingQueueCell && editingQueueCell.queueId === id && editingQueueCell.cellIndex === -2;
+    
+    // Common input styles for both labels
+    const inputStyle = {
+      width: '100%',
+      fontSize: 16,
+      fontWeight: 600,
+      color: '#111',
+      border: '1.5px solid #111',
+      borderRadius: 5,
+      textAlign: 'center' as const,
+      background: '#fff',
+      outline: 'none',
+      fontFamily: 'sans-serif',
+      padding: '2px 4px'
+    };
+    
+    // Common text styles for both labels
+    const textStyle = {
+      cursor: 'pointer' as const,
+      userSelect: 'none' as const,
+      fontSize: 16,
+      fontWeight: 600
+    };
+    
+    // Create rear label
+    const rearLabel = hasCells ? (isEditingRear ? (
+      <foreignObject x={rearLabelX} y={y - (rearLabelY + 22)} width={cellSize} height={28}>
+        <input
+          type="text"
+          value={editingQueueCell.value}
+          autoFocus
+          style={inputStyle}
+          onChange={e => setEditingQueueCell({ ...editingQueueCell, value: e.target.value })}
+          onBlur={() => { updateQueueCell(id, -1, editingQueueCell.value); setEditingQueueCell(null); }}
+          onKeyDown={e => { if (e.key === 'Enter') { updateQueueCell(id, -1, editingQueueCell.value); setEditingQueueCell(null); } }}
+        />
+      </foreignObject>
+    ) : (
+      <text
+        x={rearLabelX + cellSize / 2}
+        y={y - rearLabelY}
+        textAnchor="middle"
+        fontSize="16"
+        fontWeight="600"
+        fill="#111"
+        style={textStyle}
+        onClick={e => { e.stopPropagation(); setEditingQueueCell({ queueId: id, cellIndex: -1, value: rearLabelText }); }}
+      >
+        {rearLabelText}
+      </text>
+    )) : null;
+    
+    // Create front label
+    const frontLabel = hasCells ? (isEditingFront ? (
+      <foreignObject x={frontLabelX} y={y - (frontLabelY + 22)} width={cellSize} height={28}>
+        <input
+          type="text"
+          value={editingQueueCell.value}
+          autoFocus
+          style={inputStyle}
+          onChange={e => setEditingQueueCell({ ...editingQueueCell, value: e.target.value })}
+          onBlur={() => { updateQueueCell(id, -2, editingQueueCell.value); setEditingQueueCell(null); }}
+          onKeyDown={e => { if (e.key === 'Enter') { updateQueueCell(id, -2, editingQueueCell.value); setEditingQueueCell(null); } }}
+        />
+      </foreignObject>
+    ) : (
+      <text
+        x={frontLabelX + cellSize / 2}
+        y={y - frontLabelY}
+        textAnchor="middle"
+        fontSize="16"
+        fontWeight="600"
+        fill="#111"
+        style={textStyle}
+        onClick={e => { e.stopPropagation(); setEditingQueueCell({ queueId: id, cellIndex: -2, value: frontLabelText }); }}
+      >
+        {frontLabelText}
+      </text>
+    )) : null;
     // Ghost cell (for adding new cells)
     let ghostCell;
     if (style === 'doodle') {
@@ -1388,6 +1540,11 @@ const Canvas: React.FC = () => {
         </g>
       );
     }
+    // Render order for ghost cell and palette button
+    // For front-to-rear: + then palette; for rear-to-front: palette then +
+    const ghostAndPalette = queuePosition === 'front-to-rear'
+      ? (<React.Fragment>{ghostCell}{paletteButton}{stylePopover}</React.Fragment>)
+      : (<React.Fragment>{paletteButton}{stylePopover}{ghostCell}</React.Fragment>);
     // Drag handlers
     const handleQueueMouseDown = (e: React.MouseEvent) => {
       // Prevent drag if clicking ghost cell or palette/popover or text
@@ -1426,39 +1583,10 @@ const Canvas: React.FC = () => {
     };
     if (style === 'doodle') {
       if (elements.length === 0) {
-        // Use ghostCellX and cellSize from the queue object for consistent position
-        const ghostCell = (
-          <g
-            style={{ cursor: 'pointer' }}
-            onClick={e => { e.stopPropagation(); addQueueCell(id); }}
-          >
-            {/* Doodle-style wavy rectangle for ghost cell, matching array doodle ghost cell */}
-            <path
-              d={`M${ghostCellX+4},${ghostCellY+2} L${ghostCellX+cellSize-4},${ghostCellY-2} Q${ghostCellX+cellSize+2},${ghostCellY+cellSize/2} ${ghostCellX+cellSize-2},${ghostCellY+cellSize-4} L${ghostCellX+4},${ghostCellY+cellSize-2} Q${ghostCellX-2},${ghostCellY+cellSize/2} ${ghostCellX+4},${ghostCellY+2}`}
-              fill="none"
-              stroke="#999"
-              strokeWidth="1"
-            />
-            <text
-              x={ghostCellX + cellSize / 2}
-              y={ghostCellY + cellSize / 2 + 4}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontSize="24"
-              fill="#999"
-              fontFamily="sans-serif"
-              fontStyle="italic"
-            >
-              +
-            </text>
-          </g>
-        );
         // Always show paletteButton and stylePopover to the left of the ghost cell
         return (
           <g key={id} style={{ pointerEvents: 'all' }}>
-            {paletteButton}
-            {stylePopover}
-            {ghostCell}
+            {ghostAndPalette}
           </g>
         );
       }
@@ -1466,9 +1594,8 @@ const Canvas: React.FC = () => {
         <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleQueueMouseDown}>
           {rearLabel}
           {frontLabel}
-          {ghostCell}
-          {paletteButton}
-          {stylePopover}
+          {/* For rear-to-front, ghost+palette go before cells; for front-to-rear, after cells */}
+          {isRearToFront && ghostAndPalette}
           {/* Transparent background for dragging */}
           <rect
             x={x}
@@ -1487,7 +1614,9 @@ const Canvas: React.FC = () => {
           />
           {/* Minimalistic doodle-style cells (no fill) */}
           {elements.map((element: any, index: number) => {
-            const cellX = x + index * cellSize;
+            // For front-to-rear: flip the queue layout
+            const actualIndex = isRearToFront ? index : (elements.length - 1 - index);
+            const cellX = x + actualIndex * cellSize;
             const cellY = y;
             const isEditingValue = editingQueueCell && editingQueueCell.queueId === id && editingQueueCell.cellIndex === index;
             return (
@@ -1572,6 +1701,7 @@ const Canvas: React.FC = () => {
               </g>
             );
           })}
+          {!isRearToFront && ghostAndPalette}
         </g>
       );
     }
@@ -1580,9 +1710,8 @@ const Canvas: React.FC = () => {
       <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleQueueMouseDown}>
         {rearLabel}
         {frontLabel}
-        {ghostCell}
-        {paletteButton}
-        {stylePopover}
+        {/* For rear-to-front, ghost+palette go before cells; for front-to-rear, after cells */}
+        {isRearToFront && ghostAndPalette}
         {/* Queue container */}
         <rect
           x={x}
@@ -1596,7 +1725,9 @@ const Canvas: React.FC = () => {
         />
         {/* Queue elements */}
         {elements.map((element: any, index: number) => {
-          const cellX = x + index * cellSize;
+          // For front-to-rear: flip the queue layout
+          const actualIndex = isRearToFront ? index : (elements.length - 1 - index);
+          const cellX = x + actualIndex * cellSize;
           const cellY = y;
           const isEditingValue = editingQueueCell && editingQueueCell.queueId === id && editingQueueCell.cellIndex === index;
           return (
@@ -1684,108 +1815,12 @@ const Canvas: React.FC = () => {
             </g>
           );
         })}
+        {!isRearToFront && ghostAndPalette}
       </g>
     );
   };
 
-  // Labels: Rear (first cell), Front (last cell)
-  let rearLabel: React.ReactNode = null;
-  let frontLabel: React.ReactNode = null;
-  if (queues.length > 0) {
-    const firstQueue = queues[0];
-    const lastQueue = queues[queues.length - 1];
-    const cellSize = 60;
-    const firstCellX = firstQueue.x;
-    const lastCellX = lastQueue.x + (firstQueue.elements.length - 1) * cellSize;
-    const cellY = firstQueue.y;
-    
-    // Check if there's only one cell (rear and front would overlap)
-    const hasOnlyOneCell = firstQueue.elements.length === 1;
-    
-    // Only show labels if there are cells in the queue
-    const hasCells = firstQueue.elements.length > 0;
-    
-    // Editable label state
-    const isEditingRear = editingQueueCell && editingQueueCell.queueId === firstQueue.id && editingQueueCell.cellIndex === -1;
-    const isEditingFront = editingQueueCell && editingQueueCell.queueId === lastQueue.id && editingQueueCell.cellIndex === -2;
-    
-    // Common input styles for both labels
-    const inputStyle = {
-      width: '100%',
-      fontSize: 16,
-      fontWeight: 600,
-      color: '#111',
-      border: '1.5px solid #111',
-      borderRadius: 5,
-      textAlign: 'center' as const,
-      background: '#fff',
-      outline: 'none',
-      fontFamily: 'sans-serif',
-      padding: '2px 4px'
-    };
-    
-    // Common text styles for both labels
-    const textStyle = {
-      cursor: 'pointer' as const,
-      userSelect: 'none' as const,
-      fontSize: 16,
-      fontWeight: 600
-    };
-    
-    rearLabel = hasCells ? (isEditingRear ? (
-      <foreignObject x={firstCellX} y={cellY - 38} width={cellSize} height={28}>
-        <input
-          type="text"
-          value={editingQueueCell.value}
-          autoFocus
-          style={inputStyle}
-          onChange={e => setEditingQueueCell({ ...editingQueueCell, value: e.target.value })}
-          onBlur={() => { updateQueueCell(firstQueue.id, -1, editingQueueCell.value); setEditingQueueCell(null); }}
-          onKeyDown={e => { if (e.key === 'Enter') { updateQueueCell(firstQueue.id, -1, editingQueueCell.value); setEditingQueueCell(null); } }}
-        />
-      </foreignObject>
-    ) : (
-      <text
-        x={firstCellX + cellSize / 2}
-        y={cellY - 16}
-        textAnchor="middle"
-        fontSize="16"
-        fontWeight="600"
-        fill="#111"
-        style={textStyle}
-        onClick={e => { e.stopPropagation(); setEditingQueueCell({ queueId: firstQueue.id, cellIndex: -1, value: firstQueue.rearLabel || 'Rear' }); }}
-      >
-        {firstQueue.rearLabel || 'Rear'}
-      </text>
-    )) : null;
-    
-    frontLabel = hasCells ? (isEditingFront ? (
-      <foreignObject x={lastCellX} y={cellY - (hasOnlyOneCell ? 66 : 38)} width={cellSize} height={28}>
-        <input
-          type="text"
-          value={editingQueueCell.value}
-          autoFocus
-          style={inputStyle}
-          onChange={e => setEditingQueueCell({ ...editingQueueCell, value: e.target.value })}
-          onBlur={() => { updateQueueCell(lastQueue.id, -2, editingQueueCell.value); setEditingQueueCell(null); }}
-          onKeyDown={e => { if (e.key === 'Enter') { updateQueueCell(lastQueue.id, -2, editingQueueCell.value); setEditingQueueCell(null); } }}
-        />
-      </foreignObject>
-    ) : (
-      <text
-        x={lastCellX + cellSize / 2}
-        y={cellY - (hasOnlyOneCell ? 44 : 16)}
-        textAnchor="middle"
-        fontSize="16"
-        fontWeight="600"
-        fill="#111"
-        style={textStyle}
-        onClick={e => { e.stopPropagation(); setEditingQueueCell({ queueId: lastQueue.id, cellIndex: -2, value: lastQueue.frontLabel || 'Front' }); }}
-      >
-        {lastQueue.frontLabel || 'Front'}
-      </text>
-    )) : null;
-  }
+
 
   return (
     <div>
