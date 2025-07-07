@@ -14,12 +14,59 @@ const PALETTE_ICON = (
     <circle cx="12" cy="13" r="1.2" fill="#888"/>
   </svg>
 );
-const TEXTBOOK_ICON = (
-  <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="8" rx="2" stroke="#333" strokeWidth="2" fill="#fff"/></svg>
-);
-const DOODLE_ICON = (
-  <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M4 10 Q7 3 10 10 Q13 17 16 10" stroke="#333" strokeWidth="2" fill="none"/><ellipse cx="10" cy="10" rx="7" ry="4" stroke="#333" strokeWidth="1.5" fill="#fffbe7"/></svg>
-);
+
+// Define a Queue type for better type safety
+interface QueueElement {
+  value: string;
+  index: number;
+}
+interface Queue {
+  id: string;
+  x: number;
+  y: number;
+  elements: QueueElement[];
+  width: number;
+  height: number;
+  cellSize: number;
+  style: 'textbook' | 'doodle';
+  position: 'front-to-rear' | 'rear-to-front';
+  frontLabel?: string;
+  rearLabel?: string;
+}
+
+// Define types for arrays and stacks
+interface ArrayElement {
+  value: string;
+  index: number;
+}
+interface ArrayType {
+  id: string;
+  x: number;
+  y: number;
+  elements: ArrayElement[];
+  width: number;
+  height: number;
+  cellSize: number;
+  style: 'textbook' | 'doodle';
+  patternType: 'none' | 'two-pointers' | 'sliding-window';
+  pointers?: any[]; // TODO: Define pointer type if needed
+}
+interface StackElement {
+  value: string;
+  index: number;
+}
+interface StackType {
+  id: string;
+  x: number;
+  y: number;
+  elements: StackElement[];
+  width: number;
+  height: number;
+  cellSize: number;
+  cellWidth: number;
+  cellHeight: number;
+  style: 'textbook' | 'doodle';
+}
 
 const Canvas: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -28,7 +75,6 @@ const Canvas: React.FC = () => {
   const [start, setStart] = useState({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<{ x: number; y: number }[]>([]);
-  const [isPlacingArray, setIsPlacingArray] = useState(false);
   const [arrayPreview, setArrayPreview] = useState<{ x: number; y: number } | null>(null);
   const [hoveredArrayId, setHoveredArrayId] = useState<string | null>(null);
   const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
@@ -37,7 +83,6 @@ const Canvas: React.FC = () => {
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isActuallyDragging, setIsActuallyDragging] = useState(false);
   const [editingCell, setEditingCell] = useState<null | { arrayId: string; cellIndex: number; field: 'value' | 'index'; value: string }> (null);
-  const [isPlacingStack, setIsPlacingStack] = useState(false);
   const [stackPreview, setStackPreview] = useState<{ x: number; y: number } | null>(null);
   const [hoveredStackId, setHoveredStackId] = useState<string | null>(null);
   const [openStackPopoverId, setOpenStackPopoverId] = useState<string | null>(null);
@@ -46,7 +91,7 @@ const Canvas: React.FC = () => {
   const [stackDragOffset, setStackDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isActuallyDraggingStack, setIsActuallyDraggingStack] = useState(false);
   const [editingStackCell, setEditingStackCell] = useState<null | { stackId: string; cellIndex: number; field: 'value'; value: string }> (null);
-  const [queues, setQueues] = useState<any[]>([]);
+  const [queues, setQueues] = useState<Queue[]>([]);
   const [editingQueueCell, setEditingQueueCell] = useState<null | { queueId: string; cellIndex: number; value: string }>(null);
   const [draggingQueueId, setDraggingQueueId] = useState<string | null>(null);
   const [queueDragOffset, setQueueDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
