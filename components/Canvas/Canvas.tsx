@@ -70,7 +70,7 @@ interface StackType {
 
 const Canvas: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const { activeTool, zoom, position, setPosition, strokes, addStroke, arrays, addArray, updateArrayStyle, setActiveTool, setArrays, stacks, addStack, updateStackStyle, setStacks } = useCanvas();
+  const { activeTool, zoom, position, setPosition, strokes, addStroke, arrays, addArray, updateArrayStyle, updateArrayPatternType, updateArrayPointer, addArrayPointer, removeArrayPointer, setActiveTool, setArrays, stacks, addStack, updateStackStyle, setStacks } = useCanvas();
   const [dragging, setDragging] = useState(false);
   const [start, setStart] = useState({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
@@ -99,6 +99,10 @@ const Canvas: React.FC = () => {
   const [hoveredQueueId, setHoveredQueueId] = useState<string | null>(null);
   const [openQueuePopoverId, setOpenQueuePopoverId] = useState<string | null>(null);
   const [queuePopoverHover, setQueuePopoverHover] = useState<string | null>(null);
+  const [draggingPointerId, setDraggingPointerId] = useState<string | null>(null);
+  const [pointerDragOffset, setPointerDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [editingPointer, setEditingPointer] = useState<null | { arrayId: string; pointerId: string; value: string }> (null);
+  const [highlightColor, setHighlightColor] = useState<string>('rgba(37, 99, 235, 0.2)'); // Default blue
 
   const updateQueueStyle = (id: string, style: 'textbook' | 'doodle') => {
     setQueues(queues.map(q => q.id === id ? { ...q, style } : q));
@@ -218,6 +222,41 @@ const Canvas: React.FC = () => {
     };
   }, [draggingQueueId, queueDragOffset, queues, position.x, position.y, zoom]);
 
+  // Handle pointer dragging
+  useEffect(() => {
+    if (!draggingPointerId) return;
+    let moved = false;
+    const handleMouseMove = (e: MouseEvent) => {
+      moved = true;
+      const containerRect = canvasRef.current?.getBoundingClientRect();
+      if (!containerRect) return;
+      const mouseX = e.clientX - containerRect.left;
+      const mouseY = e.clientY - containerRect.top;
+      const newX = (mouseX - pointerDragOffset.x - position.x) / zoom;
+      const newY = (mouseY - pointerDragOffset.y - position.y) / zoom;
+      
+      // Find the array and pointer
+      const array = arrays.find(arr => arr.pointers?.some(ptr => ptr.id === draggingPointerId));
+      if (!array || !array.pointers) return;
+      const pointer = array.pointers.find(ptr => ptr.id === draggingPointerId);
+      if (!pointer) return;
+      
+      updateArrayPointer(array.id, draggingPointerId, { x: newX, y: newY });
+    };
+    const handleMouseUp = (e: MouseEvent) => {
+      setDraggingPointerId(null);
+      if (moved) {
+        window.getSelection()?.removeAllRanges();
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggingPointerId, pointerDragOffset, arrays, updateArrayPointer, position.x, position.y, zoom]);
+
   const getRelativePos = (e: React.MouseEvent | MouseEvent) => {
     const containerRect = canvasRef.current?.getBoundingClientRect();
     if (!containerRect) return { x: 0, y: 0 };
@@ -247,6 +286,8 @@ const Canvas: React.FC = () => {
       height: cellSize,
       cellSize,
       style: 'textbook' as 'textbook',
+      patternType: 'none' as 'none',
+      pointers: [],
     };
   };
 
@@ -300,6 +341,45 @@ const Canvas: React.FC = () => {
       });
       return { ...arr, elements: newElements };
     }));
+  };
+
+  const handlePatternTypeChange = (arrayId: string, patternType: 'none' | 'two-pointers' | 'sliding-window') => {
+    const array = arrays.find(arr => arr.id === arrayId);
+    if (!array) return;
+
+    updateArrayPatternType(arrayId, patternType);
+
+    if (patternType === 'two-pointers' || patternType === 'sliding-window') {
+      // Remove existing pointers
+      if (array.pointers) {
+        array.pointers.forEach(ptr => removeArrayPointer(arrayId, ptr.id));
+      }
+
+      // Create left pointer
+      const leftPointer = {
+        id: `left-${Date.now()}`,
+        name: 'L',
+        position: 'left' as const,
+        x: array.x + 20, // Center over first cell
+        y: array.y - 60  // Position above array
+      };
+      addArrayPointer(arrayId, leftPointer);
+
+      // Create right pointer
+      const rightPointer = {
+        id: `right-${Date.now()}`,
+        name: 'R',
+        position: 'right' as const,
+        x: array.x + array.width - 40, // Center over last cell
+        y: array.y - 60  // Position above array
+      };
+      addArrayPointer(arrayId, rightPointer);
+    } else {
+      // Remove all pointers for other pattern types
+      if (array.pointers) {
+        array.pointers.forEach(ptr => removeArrayPointer(arrayId, ptr.id));
+      }
+    }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -382,8 +462,159 @@ const Canvas: React.FC = () => {
     return path;
   };
 
+  // Render sliding window highlight
+  const renderSlidingWindowHighlight = (array: any) => {
+    const { id, pointers, patternType, x, y, cellSize, elements } = array;
+    if (patternType !== 'sliding-window' || !pointers || pointers.length < 2) return null;
+    
+    const leftPointer = pointers.find((p: any) => p.position === 'left');
+    const rightPointer = pointers.find((p: any) => p.position === 'right');
+    
+    if (!leftPointer || !rightPointer) return null;
+    
+    // Calculate which cells are between the pointers
+    const leftCellIndex = Math.floor((leftPointer.x - x) / cellSize);
+    const rightCellIndex = Math.floor((rightPointer.x - x) / cellSize);
+    
+    // Ensure valid indices
+    const startIndex = Math.max(0, Math.min(leftCellIndex, rightCellIndex));
+    const endIndex = Math.min(elements.length - 1, Math.max(leftCellIndex, rightCellIndex));
+    
+    // Render highlight for cells between pointers
+    return elements.map((element: any, index: number) => {
+      if (index < startIndex || index > endIndex) return null;
+      
+      const cellX = x + index * cellSize;
+      const cellY = y;
+      
+      return (
+        <rect
+          key={`highlight-${index}`}
+          x={cellX}
+          y={cellY}
+          width={cellSize}
+          height={cellSize}
+          fill={highlightColor}
+          stroke="none"
+          style={{ pointerEvents: 'none' }}
+        />
+      );
+    });
+  };
+
+  // Render pointers for arrays
+  const renderArrayPointers = (array: any) => {
+    const { id, pointers } = array;
+    if (!pointers || pointers.length === 0) return null;
+    
+    return pointers.map((pointer: any) => {
+      const isEditingPointer = editingPointer && editingPointer.arrayId === id && editingPointer.pointerId === pointer.id;
+      
+      const handlePointerMouseDown = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (activeTool !== 'move') return;
+        if (e.button !== 0) return;
+        
+        const containerRect = canvasRef.current?.getBoundingClientRect();
+        if (!containerRect) return;
+        const mouseX = e.clientX - containerRect.left;
+        const mouseY = e.clientY - containerRect.top;
+        setDraggingPointerId(pointer.id);
+        setPointerDragOffset({ x: mouseX - (pointer.x * zoom + position.x), y: mouseY - (pointer.y * zoom + position.y) });
+      };
+
+      return (
+        <g key={pointer.id} onMouseDown={handlePointerMouseDown}>
+          {/* Pointer name above arrow */}
+          {isEditingPointer ? (
+            <foreignObject x={pointer.x - 5} y={pointer.y - 5} width={30} height={20}>
+                              <input
+                  type="text"
+                  value={editingPointer.value}
+                  autoFocus
+                  style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    fontSize: 12, 
+                    fontWeight: 'bold',
+                    textAlign: 'center', 
+                    border: '1px solid #000000', 
+                    outline: 'none', 
+                    background: '#fff', 
+                    color: '#000000', 
+                    fontFamily: 'sans-serif',
+                    borderRadius: '3px'
+                  }}
+                onChange={e => setEditingPointer({ ...editingPointer, value: e.target.value })}
+                onBlur={() => { 
+                  updateArrayPointer(id, pointer.id, { name: editingPointer.value }); 
+                  setEditingPointer(null); 
+                }}
+                onKeyDown={e => { 
+                  if (e.key === 'Enter') { 
+                    updateArrayPointer(id, pointer.id, { name: editingPointer.value }); 
+                    setEditingPointer(null); 
+                  } 
+                }}
+              />
+            </foreignObject>
+          ) : (
+            <text
+              x={pointer.x + 10}
+              y={pointer.y + 5}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize="12"
+              fontWeight="bold"
+              fill="#000000"
+              fontFamily="sans-serif"
+              style={{ cursor: 'pointer' }}
+              onClick={e => { 
+                e.stopPropagation(); 
+                setEditingPointer({ arrayId: id, pointerId: pointer.id, value: pointer.name }); 
+              }}
+            >
+              {pointer.name}
+            </text>
+          )}
+          
+          {/* Minimalistic arrow pointing down to cell */}
+          {/* Arrow shaft */}
+          <line
+            x1={pointer.x + 10}
+            y1={pointer.y + 15}
+            x2={pointer.x + 10}
+            y2={pointer.y + 35}
+            stroke="#000000"
+            strokeWidth="1.5"
+            style={{ cursor: 'move' }}
+          />
+          {/* Minimalistic arrow head pointing down */}
+          <line
+            x1={pointer.x + 10}
+            y1={pointer.y + 35}
+            x2={pointer.x + 5}
+            y2={pointer.y + 30}
+            stroke="#000000"
+            strokeWidth="1.5"
+            style={{ cursor: 'move' }}
+          />
+          <line
+            x1={pointer.x + 10}
+            y1={pointer.y + 35}
+            x2={pointer.x + 15}
+            y2={pointer.y + 30}
+            stroke="#000000"
+            strokeWidth="1.5"
+            style={{ cursor: 'move' }}
+          />
+        </g>
+      );
+    });
+  };
+
   const renderArray = (array: any) => {
-    const { x, y, elements, cellSize, width, height, style, id } = array;
+    const { x, y, elements, cellSize, width, height, style, id, pointers } = array;
     // Palette icon position (to the right of the ghost cell)
     const ghostCellX = x + elements.length * cellSize;
     const ghostCellY = y;
@@ -410,7 +641,7 @@ const Canvas: React.FC = () => {
     );
     // Popover with style options (show on hover)
     const stylePopover = openPopoverId === id && (
-      <foreignObject x={popoverX} y={popoverY} width={170} height={90} className="array-style-popover" style={{ overflow: 'visible', zIndex: 10 }}>
+      <foreignObject x={popoverX} y={popoverY} width={170} height={240} className="array-style-popover" style={{ overflow: 'visible', zIndex: 10 }}>
         <div
           style={{ minWidth: 150, background: '#fff', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.13)', border: '1px solid #eee', padding: '12px 16px', fontSize: 14 }}
           onMouseEnter={() => setPopoverHover(id)}
@@ -421,10 +652,63 @@ const Canvas: React.FC = () => {
             <input type="radio" name={`array-style-${id}`} value="textbook" checked={style === 'textbook'} onChange={() => updateArrayStyle(id, 'textbook')} style={{ accentColor: '#2563eb' }} />
             <span style={{ fontWeight: 500, color: '#222' }}>Textbook Style</span>
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: style === 'doodle' ? '#f3f4f6' : 'transparent' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: style === 'doodle' ? '#f3f4f6' : 'transparent' }}>
             <input type="radio" name={`array-style-${id}`} value="doodle" checked={style === 'doodle'} onChange={() => updateArrayStyle(id, 'doodle')} style={{ accentColor: '#2563eb' }} />
             <span style={{ fontWeight: 500, color: '#222' }}>Doodle Style</span>
           </label>
+          
+          <div style={{ borderTop: '1px solid #eee', marginTop: 10, paddingTop: 10, fontWeight: 600, fontSize: 14, marginBottom: 10, color: '#222' }}>Pattern Visualization</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: (array.patternType || 'none') === 'two-pointers' ? '#f3f4f6' : 'transparent' }}>
+            <input type="radio" name={`array-pattern-${id}`} value="two-pointers" checked={(array.patternType || 'none') === 'two-pointers'} onChange={() => handlePatternTypeChange(id, 'two-pointers')} style={{ accentColor: '#2563eb' }} />
+            <span style={{ fontWeight: 500, color: '#222' }}>Two Pointers</span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: (array.patternType || 'none') === 'sliding-window' ? '#f3f4f6' : 'transparent' }}>
+            <input type="radio" name={`array-pattern-${id}`} value="sliding-window" checked={(array.patternType || 'none') === 'sliding-window'} onChange={() => handlePatternTypeChange(id, 'sliding-window')} style={{ accentColor: '#2563eb' }} />
+            <span style={{ fontWeight: 500, color: '#222' }}>Sliding Window</span>
+          </label>
+          
+          {/* Color picker for sliding window highlight */}
+          {(array.patternType === 'sliding-window') && (
+            <>
+              <div style={{ borderTop: '1px solid #eee', marginTop: 10, paddingTop: 10, fontWeight: 600, fontSize: 14, marginBottom: 8, color: '#222' }}>Highlight Color</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {[
+                  { color: 'rgba(37, 99, 235, 0.2)', name: 'Blue' },
+                  { color: 'rgba(239, 68, 68, 0.2)', name: 'Red' },
+                  { color: 'rgba(34, 197, 94, 0.2)', name: 'Green' },
+                  { color: 'rgba(245, 158, 11, 0.2)', name: 'Orange' },
+                  { color: 'rgba(168, 85, 247, 0.2)', name: 'Purple' },
+                  { color: 'rgba(236, 72, 153, 0.2)', name: 'Pink' },
+                  { color: 'rgba(6, 182, 212, 0.2)', name: 'Cyan' },
+                  { color: 'rgba(132, 204, 22, 0.2)', name: 'Lime' },
+                  { color: 'rgba(15, 23, 42, 0.2)', name: 'Dark Blue' },
+                  { color: 'rgba(127, 29, 29, 0.2)', name: 'Dark Red' },
+                  { color: 'rgba(21, 128, 61, 0.2)', name: 'Dark Green' },
+                  { color: 'rgba(154, 52, 18, 0.2)', name: 'Dark Orange' },
+                  { color: 'rgba(88, 28, 135, 0.2)', name: 'Dark Purple' },
+                  { color: 'rgba(157, 23, 77, 0.2)', name: 'Dark Pink' },
+                  { color: 'rgba(14, 116, 144, 0.2)', name: 'Dark Cyan' }
+                ].map((colorOption) => (
+                  <div
+                    key={colorOption.color}
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: '50%',
+                      background: colorOption.color,
+                      border: highlightColor === colorOption.color ? '2px solid #2563eb' : '1px solid #ddd',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    onClick={() => setHighlightColor(colorOption.color)}
+                    title={colorOption.name}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </foreignObject>
     );
@@ -682,6 +966,10 @@ const Canvas: React.FC = () => {
               </g>
             );
           })()}
+          {/* Render sliding window highlight */}
+          {renderSlidingWindowHighlight(array)}
+          {/* Render pointers */}
+          {renderArrayPointers(array)}
         </g>
       );
     }
@@ -838,6 +1126,10 @@ const Canvas: React.FC = () => {
             </g>
           );
         })}
+        {/* Render sliding window highlight */}
+        {renderSlidingWindowHighlight(array)}
+        {/* Render pointers */}
+        {renderArrayPointers(array)}
       </g>
     );
   };
