@@ -360,7 +360,6 @@ const Canvas: React.FC = () => {
     return path;
   };
 
-<<<<<<< HEAD
   // Helper to render a 3D sketch rectangle (now takes optional color overrides)
   function Sketch3DRect({x, y, w, h, seed, mainStroke, sideStroke}: {x: number, y: number, w: number, h: number, seed: number, mainStroke?: string, sideStroke?: string}) {
     function wobblyRectPath(x: number, y: number, w: number, h: number, seed: number, offset = 0) {
@@ -399,7 +398,7 @@ const Canvas: React.FC = () => {
       </g>
     );
   }
-=======
+
   // Render sliding window highlight
   const renderSlidingWindowHighlight = (array: any) => {
     const { id, pointers, patternType, x, y, cellSize, elements } = array;
@@ -550,7 +549,6 @@ const Canvas: React.FC = () => {
       );
     });
   };
->>>>>>> d1bde87b5562f0666d1cb21b91f1ce4a5fed6231
 
   const renderArray = (array: any) => {
     const { x, y, elements, cellSize, width, height, style, id, pointers } = array;
