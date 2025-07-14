@@ -22,6 +22,8 @@ const Toolbar = () => {
         return '/icons/treeicon.png';
       case 'stack':
         return '/icons/stackicon.png';
+      case 'queue':
+        return '/icons/queue.PNG';
       default:
         return '/icons/DSicon.png';
     }
@@ -37,6 +39,8 @@ const Toolbar = () => {
         return 'Binary Tree';
       case 'stack':
         return 'Stack';
+      case 'queue':
+        return 'Queue';
       default:
         return 'Data Structures';
     }
@@ -70,6 +74,8 @@ const Toolbar = () => {
       console.log('Binary tree tool not implemented yet');
     } else if (type === 'stack') {
       setActiveTool('stack');
+    } else if (type === 'queue') {
+      setActiveTool('queue');
     }
   };
 
@@ -185,6 +191,20 @@ const Toolbar = () => {
                 className={styles.dropdownIcon}
               />
               <span className={styles.dropdownLabel}>Stack</span>
+            </div>
+            
+            <div 
+              className={styles.dropdownItem}
+              onClick={() => handleDataStructureSelect('queue')}
+            >
+              <Image
+                src="/icons/queue.PNG"
+                alt="Queue"
+                width={32}
+                height={32}
+                className={styles.dropdownIcon}
+              />
+              <span className={styles.dropdownLabel}>Queue</span>
             </div>
           </div>
         )}

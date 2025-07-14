@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useRef, useState, useEffect } from 'react';
 import { useCanvas } from '@/contexts/CanvasContext';
 import './Grid.css';
@@ -13,12 +14,59 @@ const PALETTE_ICON = (
     <circle cx="12" cy="13" r="1.2" fill="#888"/>
   </svg>
 );
-const TEXTBOOK_ICON = (
-  <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="8" rx="2" stroke="#333" strokeWidth="2" fill="#fff"/></svg>
-);
-const DOODLE_ICON = (
-  <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M4 10 Q7 3 10 10 Q13 17 16 10" stroke="#333" strokeWidth="2" fill="none"/><ellipse cx="10" cy="10" rx="7" ry="4" stroke="#333" strokeWidth="1.5" fill="#fffbe7"/></svg>
-);
+
+// Define a Queue type for better type safety
+interface QueueElement {
+  value: string;
+  index: number;
+}
+interface Queue {
+  id: string;
+  x: number;
+  y: number;
+  elements: QueueElement[];
+  width: number;
+  height: number;
+  cellSize: number;
+  style: 'textbook' | 'doodle';
+  position: 'front-to-rear' | 'rear-to-front';
+  frontLabel?: string;
+  rearLabel?: string;
+}
+
+// Define types for arrays and stacks
+interface ArrayElement {
+  value: string;
+  index: number;
+}
+interface ArrayType {
+  id: string;
+  x: number;
+  y: number;
+  elements: ArrayElement[];
+  width: number;
+  height: number;
+  cellSize: number;
+  style: 'textbook' | 'doodle';
+  patternType: 'none' | 'two-pointers' | 'sliding-window';
+  pointers?: any[]; // TODO: Define pointer type if needed
+}
+interface StackElement {
+  value: string;
+  index: number;
+}
+interface StackType {
+  id: string;
+  x: number;
+  y: number;
+  elements: StackElement[];
+  width: number;
+  height: number;
+  cellSize: number;
+  cellWidth: number;
+  cellHeight: number;
+  style: 'textbook' | 'doodle';
+}
 
 const Canvas: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -27,7 +75,6 @@ const Canvas: React.FC = () => {
   const [start, setStart] = useState({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<{ x: number; y: number }[]>([]);
-  const [isPlacingArray, setIsPlacingArray] = useState(false);
   const [arrayPreview, setArrayPreview] = useState<{ x: number; y: number } | null>(null);
   const [hoveredArrayId, setHoveredArrayId] = useState<string | null>(null);
   const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
@@ -36,7 +83,6 @@ const Canvas: React.FC = () => {
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isActuallyDragging, setIsActuallyDragging] = useState(false);
   const [editingCell, setEditingCell] = useState<null | { arrayId: string; cellIndex: number; field: 'value' | 'index'; value: string }> (null);
-  const [isPlacingStack, setIsPlacingStack] = useState(false);
   const [stackPreview, setStackPreview] = useState<{ x: number; y: number } | null>(null);
   const [hoveredStackId, setHoveredStackId] = useState<string | null>(null);
   const [openStackPopoverId, setOpenStackPopoverId] = useState<string | null>(null);
@@ -45,10 +91,26 @@ const Canvas: React.FC = () => {
   const [stackDragOffset, setStackDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isActuallyDraggingStack, setIsActuallyDraggingStack] = useState(false);
   const [editingStackCell, setEditingStackCell] = useState<null | { stackId: string; cellIndex: number; field: 'value'; value: string }> (null);
+  const [queues, setQueues] = useState<Queue[]>([]);
+  const [editingQueueCell, setEditingQueueCell] = useState<null | { queueId: string; cellIndex: number; value: string }>(null);
+  const [draggingQueueId, setDraggingQueueId] = useState<string | null>(null);
+  const [queueDragOffset, setQueueDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isActuallyDraggingQueue, setIsActuallyDraggingQueue] = useState(false);
+  const [hoveredQueueId, setHoveredQueueId] = useState<string | null>(null);
+  const [openQueuePopoverId, setOpenQueuePopoverId] = useState<string | null>(null);
+  const [queuePopoverHover, setQueuePopoverHover] = useState<string | null>(null);
   const [draggingPointerId, setDraggingPointerId] = useState<string | null>(null);
   const [pointerDragOffset, setPointerDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [editingPointer, setEditingPointer] = useState<null | { arrayId: string; pointerId: string; value: string }> (null);
   const [highlightColor, setHighlightColor] = useState<string>('rgba(37, 99, 235, 0.2)'); // Default blue
+
+  const updateQueueStyle = (id: string, style: 'textbook' | 'doodle') => {
+    setQueues(queues.map(q => q.id === id ? { ...q, style } : q));
+  };
+
+  const updateQueuePosition = (id: string, position: 'front-to-rear' | 'rear-to-front') => {
+    setQueues(queues.map(q => q.id === id ? { ...q, position } : q));
+  };
 
   // Close popover on outside click
   useEffect(() => {
@@ -127,6 +189,38 @@ const Canvas: React.FC = () => {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [draggingStackId, stackDragOffset, stacks, setStacks, position.x, position.y, zoom]);
+
+  // Handle queue dragging
+  useEffect(() => {
+    if (!draggingQueueId) return;
+    let moved = false;
+    const handleMouseMove = (e: MouseEvent) => {
+      moved = true;
+      setIsActuallyDraggingQueue(true);
+      const queue = queues.find(q => q.id === draggingQueueId);
+      if (!queue) return;
+      const containerRect = canvasRef.current?.getBoundingClientRect();
+      if (!containerRect) return;
+      const mouseX = e.clientX - containerRect.left;
+      const mouseY = e.clientY - containerRect.top;
+      const newX = (mouseX - queueDragOffset.x - position.x) / zoom;
+      const newY = (mouseY - queueDragOffset.y - position.y) / zoom;
+      setQueues(queues.map(q => q.id === draggingQueueId ? { ...q, x: newX, y: newY } : q));
+    };
+    const handleMouseUp = (e: MouseEvent) => {
+      setDraggingQueueId(null);
+      setTimeout(() => setIsActuallyDraggingQueue(false), 100);
+      if (moved) {
+        window.getSelection()?.removeAllRanges();
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggingQueueId, queueDragOffset, queues, position.x, position.y, zoom]);
 
   // Handle pointer dragging
   useEffect(() => {
@@ -306,6 +400,11 @@ const Canvas: React.FC = () => {
       const newStack = createDefaultStack(pos.x, pos.y);
       addStack(newStack);
       setActiveTool('move');
+    } else if (activeTool === 'queue') {
+      const pos = getRelativePos(e);
+      const newQueue = createDefaultQueue(pos.x, pos.y);
+      addQueue(newQueue);
+      setActiveTool('move');
     }
   };
 
@@ -321,6 +420,9 @@ const Canvas: React.FC = () => {
     } else if (activeTool === 'stack') {
       const pos = getRelativePos(e);
       setStackPreview(pos);
+    } else if (activeTool === 'queue') {
+      const pos = getRelativePos(e);
+      setArrayPreview(pos);
     }
   };
 
@@ -1479,6 +1581,605 @@ const Canvas: React.FC = () => {
     );
   };
 
+  const createDefaultQueue = (x: number, y: number) => {
+    const cellSize = 60;
+    const defaultElements = [
+      { value: '', index: 0 },
+    ];
+    return {
+      id: Date.now().toString() + '-queue',
+      x,
+      y,
+      elements: defaultElements,
+      width: defaultElements.length * cellSize,
+      height: cellSize,
+      cellSize,
+      style: 'textbook' as 'textbook',
+      position: 'front-to-rear' as 'front-to-rear',
+    };
+  };
+
+  const addQueue = (queue: any) => {
+    setQueues(prev => [...prev, queue]);
+  };
+
+  const addQueueCell = (queueId: string) => {
+    const queue = queues.find(q => q.id === queueId);
+    if (!queue) return;
+    const minIndex = Math.min(...queue.elements.map((el: any) => el.index), 0);
+    const newIndex = minIndex - 1;
+    const newElements = [
+      { value: '', index: newIndex },
+      ...queue.elements,
+    ];
+    const newWidth = newElements.length * queue.cellSize;
+    setQueues(queues.map(q => q.id === queueId ? { ...q, elements: newElements, width: newWidth } : q));
+  };
+
+  const deleteQueueCell = (queueId: string, cellIndex: number) => {
+    const queue = queues.find(q => q.id === queueId);
+    if (!queue) return;
+    const newElements = queue.elements.filter((_: any, idx: number) => idx !== cellIndex);
+    // Update indices for remaining elements
+    const updatedElements = newElements.map((el: any, idx: number) => ({ ...el, index: idx }));
+    const newWidth = updatedElements.length * queue.cellSize;
+    setQueues(queues.map(q => q.id === queueId ? { ...q, elements: updatedElements, width: newWidth } : q));
+  };
+
+  const updateQueueCell = (queueId: string, cellIndex: number, newValue: string) => {
+    setQueues(queues.map(queue => {
+      if (queue.id !== queueId) return queue;
+      
+      // Handle special cases for labels (cellIndex -1 for rear, -2 for front)
+      if (cellIndex === -1) {
+        // Determine which label to update based on position
+        const isRearToFront = queue.position === 'rear-to-front';
+        if (isRearToFront) {
+          return { ...queue, rearLabel: newValue };
+        } else {
+          return { ...queue, frontLabel: newValue };
+        }
+      } else if (cellIndex === -2) {
+        // Determine which label to update based on position
+        const isRearToFront = queue.position === 'rear-to-front';
+        if (isRearToFront) {
+          return { ...queue, frontLabel: newValue };
+        } else {
+          return { ...queue, rearLabel: newValue };
+        }
+      }
+      
+      // Handle regular cell updates
+      const newElements = queue.elements.map((el: any, idx: number) => idx === cellIndex ? { ...el, value: newValue } : el);
+      return { ...queue, elements: newElements };
+    }));
+  };
+
+  const renderQueue = (queue: any) => {
+    const { x, y, elements, cellSize, width, height, style, id } = queue;
+    
+    // Get queue position setting from the current queue being rendered
+    const queuePosition = queue.position || 'front-to-rear';
+    
+    // Calculate ghost cell and palette positions based on queue direction
+    let ghostCellX, ghostCellY, iconX, iconY, popoverX, popoverY;
+    if (queuePosition === 'rear-to-front') {
+      // Rear-to-front: ghost cell and palette to the left of the first cell
+      ghostCellX = x - cellSize;
+      ghostCellY = y;
+      iconX = ghostCellX - 8 - 24; // 8px gap, 24px icon width
+      iconY = y + cellSize / 2 - 12;
+      popoverX = iconX + 28;
+      popoverY = iconY - 8;
+    } else {
+      // Front-to-rear: ghost cell and palette to the right of the last cell
+      ghostCellX = x + elements.length * cellSize;
+      ghostCellY = y;
+      iconX = ghostCellX + cellSize + 8; // move palette to the right of the ghost cell
+      iconY = y + cellSize / 2 - 12;
+      popoverX = iconX + 28;
+      popoverY = iconY - 8;
+    }
+    
+    // Show palette icon only on hover
+    const showPalette = hoveredQueueId === id;
+    // Show popover if openQueuePopoverId === id
+    const showPopover = openQueuePopoverId === id;
+    // Palette icon button (show popover on hover)
+    const paletteButton = (
+      <foreignObject x={iconX} y={iconY} width={24} height={24} style={{ overflow: 'visible', cursor: 'pointer' }}>
+        <div
+          style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 12, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.10)', border: '1px solid #eee' }}
+          onMouseEnter={() => setOpenQueuePopoverId(id)}
+          onMouseLeave={() => setTimeout(() => { if (!queuePopoverHover) setOpenQueuePopoverId(null); }, 100) }
+        >
+          {PALETTE_ICON}
+        </div>
+      </foreignObject>
+    );
+    // Popover with style options (show on hover)
+    const stylePopover = showPopover && (
+      <foreignObject x={popoverX} y={popoverY} width={170} height={140} className="array-style-popover" style={{ overflow: 'visible', zIndex: 10 }}>
+        <div
+          style={{ minWidth: 150, background: '#fff', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.13)', border: '1px solid #eee', padding: '12px 16px', fontSize: 14 }}
+          onMouseEnter={() => setQueuePopoverHover(id)}
+          onMouseLeave={() => { setQueuePopoverHover(null); setOpenQueuePopoverId(null); }}
+        >
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10, color: '#222' }}>Queue Style</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: style === 'textbook' ? '#f3f4f6' : 'transparent' }}>
+            <input type="radio" name={`queue-style-${id}`} value="textbook" checked={style === 'textbook'} onChange={() => updateQueueStyle(id, 'textbook')} style={{ accentColor: '#2563eb' }} />
+            <span style={{ fontWeight: 500, color: '#222' }}>Textbook Style</span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: style === 'doodle' ? '#f3f4f6' : 'transparent' }}>
+            <input type="radio" name={`queue-style-${id}`} value="doodle" checked={style === 'doodle'} onChange={() => updateQueueStyle(id, 'doodle')} style={{ accentColor: '#2563eb' }} />
+            <span style={{ fontWeight: 500, color: '#222' }}>Doodle Style</span>
+          </label>
+          
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10, color: '#222', marginTop: 8 }}>Queue Position</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: (queue.position || 'front-to-rear') === 'front-to-rear' ? '#f3f4f6' : 'transparent' }}>
+            <input type="radio" name={`queue-position-${id}`} value="front-to-rear" checked={(queue.position || 'front-to-rear') === 'front-to-rear'} onChange={() => updateQueuePosition(id, 'front-to-rear')} style={{ accentColor: '#2563eb' }} />
+            <span style={{ fontWeight: 500, color: '#222' }}>Front-to-Rear</span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: (queue.position || 'front-to-rear') === 'rear-to-front' ? '#f3f4f6' : 'transparent' }}>
+            <input type="radio" name={`queue-position-${id}`} value="rear-to-front" checked={(queue.position || 'front-to-rear') === 'rear-to-front'} onChange={() => updateQueuePosition(id, 'rear-to-front')} style={{ accentColor: '#2563eb' }} />
+            <span style={{ fontWeight: 500, color: '#222' }}>Rear-to-Front</span>
+          </label>
+        </div>
+      </foreignObject>
+    );
+    // Mouse event handlers for hover
+    const handleGroupMouseEnter = () => setHoveredQueueId(id);
+    const handleGroupMouseLeave = () => setHoveredQueueId(current => (current === id ? null : current));
+    
+    // Check if there's only one cell (rear and front would overlap)
+    const hasOnlyOneCell = elements.length === 1;
+    
+    // Only show labels if there are cells in the queue
+    const hasCells = elements.length > 0;
+    
+    // Determine label positions based on queue position setting
+    const isRearToFront = queuePosition === 'rear-to-front';
+    
+
+    
+    // For rear-to-front: Rear on first cell, Front on last cell
+    // For front-to-rear: Front on first cell, Rear on last cell
+    const firstCellX = x;
+    const lastCellX = x + (elements.length - 1) * cellSize;
+    // Keep labels in their original positions, just change the text
+    const rearLabelX = firstCellX;
+    const frontLabelX = lastCellX;
+    const rearLabelY = isRearToFront ? 16 : (hasOnlyOneCell ? 44 : 16);
+    const frontLabelY = isRearToFront ? (hasOnlyOneCell ? 44 : 16) : 16;
+    
+    // For front-to-rear: swap the label texts to match the flipped layout
+    const rearLabelText = isRearToFront ? (queue.rearLabel || 'Rear') : (queue.frontLabel || 'Front');
+    const frontLabelText = isRearToFront ? (queue.frontLabel || 'Front') : (queue.rearLabel || 'Rear');
+    
+    // Editable label state
+    const isEditingRear = editingQueueCell && editingQueueCell.queueId === id && editingQueueCell.cellIndex === -1;
+    const isEditingFront = editingQueueCell && editingQueueCell.queueId === id && editingQueueCell.cellIndex === -2;
+    
+    // Common input styles for both labels
+    const inputStyle = {
+      width: '100%',
+      fontSize: 16,
+      fontWeight: 600,
+      color: '#111',
+      border: '1.5px solid #111',
+      borderRadius: 5,
+      textAlign: 'center' as const,
+      background: '#fff',
+      outline: 'none',
+      fontFamily: 'sans-serif',
+      padding: '2px 4px'
+    };
+    
+    // Common text styles for both labels
+    const textStyle = {
+      cursor: 'pointer' as const,
+      userSelect: 'none' as const,
+      fontSize: 16,
+      fontWeight: 600
+    };
+    
+    // Create rear label
+    const rearLabel = hasCells ? (isEditingRear ? (
+      <foreignObject x={rearLabelX} y={y - (rearLabelY + 22)} width={cellSize} height={28}>
+        <input
+          type="text"
+          value={editingQueueCell.value}
+          autoFocus
+          style={inputStyle}
+          onChange={e => setEditingQueueCell({ ...editingQueueCell, value: e.target.value })}
+          onBlur={() => { updateQueueCell(id, -1, editingQueueCell.value); setEditingQueueCell(null); }}
+          onKeyDown={e => { if (e.key === 'Enter') { updateQueueCell(id, -1, editingQueueCell.value); setEditingQueueCell(null); } }}
+        />
+      </foreignObject>
+    ) : (
+      <text
+        x={rearLabelX + cellSize / 2}
+        y={y - rearLabelY}
+        textAnchor="middle"
+        fontSize="16"
+        fontWeight="600"
+        fill="#111"
+        style={textStyle}
+        onClick={e => { e.stopPropagation(); setEditingQueueCell({ queueId: id, cellIndex: -1, value: rearLabelText }); }}
+      >
+        {rearLabelText}
+      </text>
+    )) : null;
+    
+    // Create front label
+    const frontLabel = hasCells ? (isEditingFront ? (
+      <foreignObject x={frontLabelX} y={y - (frontLabelY + 22)} width={cellSize} height={28}>
+        <input
+          type="text"
+          value={editingQueueCell.value}
+          autoFocus
+          style={inputStyle}
+          onChange={e => setEditingQueueCell({ ...editingQueueCell, value: e.target.value })}
+          onBlur={() => { updateQueueCell(id, -2, editingQueueCell.value); setEditingQueueCell(null); }}
+          onKeyDown={e => { if (e.key === 'Enter') { updateQueueCell(id, -2, editingQueueCell.value); setEditingQueueCell(null); } }}
+        />
+      </foreignObject>
+    ) : (
+      <text
+        x={frontLabelX + cellSize / 2}
+        y={y - frontLabelY}
+        textAnchor="middle"
+        fontSize="16"
+        fontWeight="600"
+        fill="#111"
+        style={textStyle}
+        onClick={e => { e.stopPropagation(); setEditingQueueCell({ queueId: id, cellIndex: -2, value: frontLabelText }); }}
+      >
+        {frontLabelText}
+      </text>
+    )) : null;
+    // Ghost cell (for adding new cells)
+    let ghostCell;
+    if (style === 'doodle') {
+      ghostCell = (
+        <g
+          style={{ cursor: 'pointer' }}
+          onClick={e => { e.stopPropagation(); addQueueCell(id); }}
+        >
+          {/* Doodle-style wavy rectangle for ghost cell, matching array doodle ghost cell */}
+          <path
+            d={`M${ghostCellX+4},${ghostCellY+2} L${ghostCellX+cellSize-4},${ghostCellY-2} Q${ghostCellX+cellSize+2},${ghostCellY+cellSize/2} ${ghostCellX+cellSize-2},${ghostCellY+cellSize-4} L${ghostCellX+4},${ghostCellY+cellSize-2} Q${ghostCellX-2},${ghostCellY+cellSize/2} ${ghostCellX+4},${ghostCellY+2}`}
+            fill="none"
+            stroke="#999"
+            strokeWidth="1"
+          />
+          <text
+            x={ghostCellX + cellSize / 2}
+            y={ghostCellY + cellSize / 2 + 4}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize="24"
+            fill="#999"
+            fontFamily="sans-serif"
+            fontStyle="italic"
+          >
+            +
+          </text>
+        </g>
+      );
+    } else {
+      ghostCell = (
+        <g
+          style={{ cursor: 'pointer' }}
+          onClick={e => { e.stopPropagation(); addQueueCell(id); }}
+        >
+          <rect
+            x={ghostCellX}
+            y={ghostCellY}
+            width={cellSize}
+            height={cellSize}
+            fill="transparent"
+            stroke="#999"
+            strokeWidth="1"
+            rx="4"
+          />
+          <text
+            x={ghostCellX + cellSize / 2}
+            y={ghostCellY + cellSize / 2 + 4}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize="24"
+            fill="#999"
+            fontFamily="sans-serif"
+            fontStyle="italic"
+          >
+            +
+          </text>
+        </g>
+      );
+    }
+    // Render order for ghost cell and palette button
+    // For front-to-rear: + then palette; for rear-to-front: palette then +
+    const ghostAndPalette = queuePosition === 'front-to-rear'
+      ? (<React.Fragment>{ghostCell}{paletteButton}{stylePopover}</React.Fragment>)
+      : (<React.Fragment>{paletteButton}{stylePopover}{ghostCell}</React.Fragment>);
+    // Drag handlers
+    const handleQueueMouseDown = (e: React.MouseEvent) => {
+      // Prevent drag if clicking ghost cell or palette/popover or text
+      const target = e.target as HTMLElement;
+      if (
+        target.closest('.array-style-popover') ||
+        (target.tagName === 'text') ||
+        (target.tagName === 'tspan') ||
+        (target.tagName === 'INPUT') ||
+        (target.closest('foreignObject'))
+      ) {
+        return;
+      }
+      // Only allow dragging in move mode
+      if (activeTool !== 'move') {
+        return;
+      }
+      // Only left mouse button
+      if (e.button !== 0) return;
+      const containerRect = canvasRef.current?.getBoundingClientRect();
+      if (!containerRect) return;
+      const mouseX = e.clientX - containerRect.left;
+      const mouseY = e.clientY - containerRect.top;
+      setDraggingQueueId(id);
+      setQueueDragOffset({ x: mouseX - (x * zoom + position.x), y: mouseY - (y * zoom + position.y) });
+    };
+    // Drag shadow/highlight
+    const dragging = draggingQueueId === id && isActuallyDraggingQueue;
+    const groupStyle: React.CSSProperties = {
+      pointerEvents: 'auto',
+      cursor: 'move',
+      filter: dragging ? 'drop-shadow(0 4px 16px rgba(0,0,0,0.18))' : undefined,
+      transition: dragging ? 'none' : 'filter 0.18s',
+      zIndex: dragging ? 10 : undefined,
+      userSelect: dragging ? 'none' : undefined,
+    };
+    if (style === 'doodle') {
+      if (elements.length === 0) {
+        // Always show paletteButton and stylePopover to the left of the ghost cell
+        return (
+          <g key={id} style={{ pointerEvents: 'all' }}>
+            {ghostAndPalette}
+          </g>
+        );
+      }
+      return (
+        <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleQueueMouseDown}>
+          {rearLabel}
+          {frontLabel}
+          {/* For rear-to-front, ghost+palette go before cells; for front-to-rear, after cells */}
+          {isRearToFront && ghostAndPalette}
+          {/* Transparent background for dragging */}
+          <rect
+            x={x}
+            y={y}
+            width={width}
+            height={height}
+            fill="transparent"
+            stroke="none"
+          />
+          {/* Minimalistic doodle-style container (slightly wavy rectangle, no fill) */}
+          <path
+            d={`M${x+4},${y+2} L${x+width-4},${y-2} Q${x+width+2},${y+height/2} ${x+width-2},${y+height-4} L${x+4},${y+height-2} Q${x-2},${y+height/2} ${x+4},${y+2}`}
+            fill="none"
+            stroke="#222"
+            strokeWidth="1.2"
+          />
+          {/* Minimalistic doodle-style cells (no fill) */}
+          {elements.map((element: any, index: number) => {
+            // For front-to-rear: flip the queue layout
+            const actualIndex = isRearToFront ? index : (elements.length - 1 - index);
+            const cellX = x + actualIndex * cellSize;
+            const cellY = y;
+            const isEditingValue = editingQueueCell && editingQueueCell.queueId === id && editingQueueCell.cellIndex === index;
+            return (
+              <g key={index}>
+                {/* Slightly wavy cell border */}
+                <path
+                  d={`M${cellX+4},${cellY+2} L${cellX+cellSize-4},${cellY-2} Q${cellX+cellSize+2},${cellY+cellSize/2} ${cellX+cellSize-2},${cellY+cellSize-4} L${cellX+4},${cellY+cellSize-2} Q${cellX-2},${cellY+cellSize/2} ${cellX+4},${cellY+2}`}
+                  fill="none"
+                  stroke="#222"
+                  strokeWidth="1"
+                />
+                {/* Editable value */}
+                {isEditingValue ? (
+                  <foreignObject x={cellX + cellSize * 0.1} y={cellY + cellSize * 0.25} width={cellSize * 0.8} height={cellSize * 0.5}>
+                    <input
+                      type="text"
+                      value={editingQueueCell.value}
+                      autoFocus
+                      style={{ width: '100%', fontSize: 16, fontStyle: 'italic', textAlign: 'center', border: '1px solid #bbb', borderRadius: 4, outline: 'none', background: '#fff', color: '#222', fontFamily: 'sans-serif' }}
+                      onChange={e => setEditingQueueCell({ ...editingQueueCell, value: e.target.value })}
+                      onBlur={() => { updateQueueCell(id, index, editingQueueCell.value); setEditingQueueCell(null); }}
+                      onKeyDown={e => { if (e.key === 'Enter') { updateQueueCell(id, index, editingQueueCell.value); setEditingQueueCell(null); } }}
+                    />
+                  </foreignObject>
+                ) : (
+                  <>
+                    {/* Transparent background for easier clicking */}
+                    <rect
+                      x={cellX + cellSize * 0.1}
+                      y={cellY + cellSize * 0.1}
+                      width={cellSize * 0.8}
+                      height={cellSize * 0.8}
+                      fill="transparent"
+                      stroke="none"
+                      style={{ cursor: 'pointer' }}
+                      onClick={e => { 
+                        e.stopPropagation(); 
+                        setEditingQueueCell({ queueId: id, cellIndex: index, value: element.value }); 
+                      }}
+                    />
+                    <text
+                      x={cellX + cellSize / 2}
+                      y={cellY + cellSize / 2 + 5}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize="16"
+                      fontStyle="italic"
+                      fill="#222"
+                      fontFamily="sans-serif"
+                      style={{ cursor: 'pointer', pointerEvents: 'none' }}
+                    >
+                      {element.value}
+                    </text>
+                  </>
+                )}
+                {index === elements.length - 1 && (
+                  <g
+                    style={{ cursor: 'pointer' }}
+                    onClick={e => { e.stopPropagation(); deleteQueueCell(id, index); }}
+                  >
+                    <circle
+                      cx={cellX + cellSize - 6}
+                      cy={cellY + 6}
+                      r="6"
+                      fill="transparent"
+                      stroke="#999"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={cellX + cellSize - 6}
+                      y={cellY + 6}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize="10"
+                      fill="#999"
+                      style={{ pointerEvents: 'none' }}
+                    >
+                      −
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+          {!isRearToFront && ghostAndPalette}
+        </g>
+      );
+    }
+    // Textbook style (default)
+    return (
+      <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleQueueMouseDown}>
+        {rearLabel}
+        {frontLabel}
+        {/* For rear-to-front, ghost+palette go before cells; for front-to-rear, after cells */}
+        {isRearToFront && ghostAndPalette}
+        {/* Queue container */}
+        <rect
+          x={x}
+          y={y}
+          width={width}
+          height={height}
+          fill="white"
+          stroke="#222"
+          strokeWidth="2"
+          rx="4"
+        />
+        {/* Queue elements */}
+        {elements.map((element: any, index: number) => {
+          // For front-to-rear: flip the queue layout
+          const actualIndex = isRearToFront ? index : (elements.length - 1 - index);
+          const cellX = x + actualIndex * cellSize;
+          const cellY = y;
+          const isEditingValue = editingQueueCell && editingQueueCell.queueId === id && editingQueueCell.cellIndex === index;
+          return (
+            <g key={index}>
+              {/* Cell border */}
+              <rect
+                x={cellX}
+                y={cellY}
+                width={cellSize}
+                height={cellSize}
+                fill="white"
+                stroke="#222"
+                strokeWidth="1"
+              />
+              {/* Editable value */}
+              {isEditingValue ? (
+                <foreignObject x={cellX + cellSize * 0.1} y={cellY + cellSize * 0.25} width={cellSize * 0.8} height={cellSize * 0.5}>
+                  <input
+                    type="text"
+                    value={editingQueueCell.value}
+                    autoFocus
+                    style={{ width: '100%', fontSize: 16, fontStyle: 'italic', textAlign: 'center', border: '1px solid #bbb', borderRadius: 4, outline: 'none', background: '#fff', color: '#222', fontFamily: 'sans-serif' }}
+                    onChange={e => setEditingQueueCell({ ...editingQueueCell, value: e.target.value })}
+                    onBlur={() => { updateQueueCell(id, index, editingQueueCell.value); setEditingQueueCell(null); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { updateQueueCell(id, index, editingQueueCell.value); setEditingQueueCell(null); } }}
+                  />
+                </foreignObject>
+              ) : (
+                <>
+                  {/* Transparent background for easier clicking */}
+                  <rect
+                    x={cellX + cellSize * 0.1}
+                    y={cellY + cellSize * 0.1}
+                    width={cellSize * 0.8}
+                    height={cellSize * 0.8}
+                    fill="transparent"
+                    stroke="none"
+                    style={{ cursor: 'pointer' }}
+                    onClick={e => { 
+                      e.stopPropagation(); 
+                      setEditingQueueCell({ queueId: id, cellIndex: index, value: element.value }); 
+                    }}
+                  />
+                  <text
+                    x={cellX + cellSize / 2}
+                    y={cellY + cellSize / 2 + 5}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize="16"
+                    fontStyle="italic"
+                    fill="#222"
+                    fontFamily="sans-serif"
+                    style={{ cursor: 'pointer', pointerEvents: 'none' }}
+                  >
+                    {element.value}
+                  </text>
+                </>
+              )}
+              {index === elements.length - 1 && (
+                <g
+                  style={{ cursor: 'pointer' }}
+                  onClick={e => { e.stopPropagation(); deleteQueueCell(id, index); }}
+                >
+                  <circle
+                    cx={cellX + cellSize - 6}
+                    cy={cellY + 6}
+                    r="6"
+                    fill="transparent"
+                    stroke="#999"
+                    strokeWidth="1"
+                  />
+                  <text
+                    x={cellX + cellSize - 6}
+                    y={cellY + 6}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize="10"
+                    fill="#999"
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    −
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+        {!isRearToFront && ghostAndPalette}
+      </g>
+    );
+  };
+
+
+
   return (
     <div>
       {/* Canvas and SVG */}
@@ -1490,7 +2191,8 @@ const Canvas: React.FC = () => {
           cursor: activeTool === 'move' ? (dragging ? 'grabbing' : 'grab') : 
                   activeTool === 'draw' ? 'crosshair' : 
                   activeTool === 'array' ? 'crosshair' : 
-                  activeTool === 'stack' ? 'crosshair' : 'default',
+                  activeTool === 'stack' ? 'crosshair' : 
+                  activeTool === 'queue' ? 'crosshair' : 'default',
         }}
       >
         <div
@@ -1564,6 +2266,8 @@ const Canvas: React.FC = () => {
                 {renderStack(createDefaultStack(stackPreview.x, stackPreview.y), 0, stacks)}
               </g>
             )}
+            {/* Render queues */}
+            {queues.map(renderQueue)}
           </g>
         </svg>
       </div>

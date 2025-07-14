@@ -1,6 +1,5 @@
 "use client"
 import Image from "next/image";
-import { Heading } from "@chakra-ui/react";
 import Canvas from '@/components/Canvas/Canvas';
 import Toolbar from '@/components/Toolbar/Toolbar';
 import { CanvasProvider } from '@/contexts/CanvasContext';
