@@ -46,6 +46,8 @@ interface StackDataStructure {
   width: number;
   height: number;
   cellSize: number;
+  cellWidth: number;
+  cellHeight: number;
   style: 'textbook' | 'doodle';
 }
 

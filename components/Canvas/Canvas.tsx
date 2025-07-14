@@ -360,6 +360,45 @@ const Canvas: React.FC = () => {
     return path;
   };
 
+  // Helper to render a 3D sketch rectangle (now takes optional color overrides)
+  function Sketch3DRect({x, y, w, h, seed, mainStroke, sideStroke}: {x: number, y: number, w: number, h: number, seed: number, mainStroke?: string, sideStroke?: string}) {
+    function wobblyRectPath(x: number, y: number, w: number, h: number, seed: number, offset = 0) {
+      function rand(n: number, scale = 2.5) {
+        return Math.sin(seed * 999 + n * 77 + offset * 13) * scale;
+      }
+      return [
+        `M${x+rand(1)},${y+rand(2)}`,
+        `L${x+w+rand(3)},${y+rand(4)}`,
+        `L${x+w+rand(5)},${y+h+rand(6)}`,
+        `L${x+rand(7)},${y+h+rand(8)}`,
+        'Z'
+      ].join(' ');
+    }
+    function wobbly3DSidePath(x: number, y: number, w: number, h: number, seed: number, offset = 0, depth = 8) {
+      function rand(n: number, scale = 2) {
+        return Math.sin(seed * 555 + n * 33 + offset * 17) * scale;
+      }
+      return [
+        `M${x+w+rand(1)},${y+rand(2)}`,
+        `L${x+w+depth+rand(3)},${y+depth+rand(4)}`,
+        `L${x+w+depth+rand(5)},${y+h+depth+rand(6)}`,
+        `L${x+w+rand(7)},${y+h+rand(8)}`,
+        `M${x+rand(9)},${y+h+rand(10)}`,
+        `L${x+w+rand(11)},${y+h+rand(12)}`,
+        `L${x+w+depth+rand(13)},${y+h+depth+rand(14)}`,
+        `L${x+depth+rand(15)},${y+h+depth+rand(16)}`
+      ].join(' ');
+    }
+    return (
+      <g>
+        {/* Main face (optionally gray border) */}
+        <path d={wobblyRectPath(x, y, w, h, seed, 0)} fill="none" stroke={mainStroke || '#222'} strokeWidth="1.3" />
+        {/* 3D right and bottom sides (optionally lighter gray) */}
+        <path d={wobbly3DSidePath(x, y, w, h, seed, 0, 8)} fill="none" stroke={sideStroke || '#888'} strokeWidth="1.1" opacity="0.7" />
+      </g>
+    );
+  }
+
   // Render sliding window highlight
   const renderSlidingWindowHighlight = (array: any) => {
     const { id, pointers, patternType, x, y, cellSize, elements } = array;
@@ -1139,12 +1178,28 @@ const Canvas: React.FC = () => {
         onClick={e => { e.stopPropagation(); addStackCell(id); }}
       >
         {style === 'doodle' ? (
-          <path
-            d={`M${ghostCellX+4},${ghostCellY+2} L${ghostCellX+cellWidth-4},${ghostCellY-2} Q${ghostCellX+cellWidth+2},${ghostCellY+cellHeight/2} ${ghostCellX+cellWidth-2},${ghostCellY+cellHeight-4} L${ghostCellX+4},${ghostCellY+cellHeight-2} Q${ghostCellX-2},${ghostCellY+cellHeight/2} ${ghostCellX+4},${ghostCellY+2}`}
-            fill="none"
-            stroke="#999"
-            strokeWidth="1"
-          />
+          <>
+            {/* 3D hand-drawn ghost cell box with gray fill and gray border to match textbook style */}
+            <g>
+              <rect
+                x={ghostCellX}
+                y={ghostCellY}
+                width={cellWidth}
+                height={cellHeight}
+                fill="#f3f4f6"
+                stroke="none"
+                rx="6"
+              />
+              <Sketch3DRect x={ghostCellX} y={ghostCellY} w={cellWidth} h={cellHeight} seed={-1} mainStroke="#bbb" sideStroke="#d1d5db" />
+            </g>
+            {/* 3D hand-drawn plus sign (smaller, gray) */}
+            <g>
+              <path d={`M${ghostCellX + cellWidth/2},${ghostCellY + cellHeight/2 - 5} L${ghostCellX + cellWidth/2},${ghostCellY + cellHeight/2 + 5}`} stroke="#bbb" strokeWidth="2.2" strokeLinecap="round" />
+              <path d={`M${ghostCellX + cellWidth/2 - 5},${ghostCellY + cellHeight/2} L${ghostCellX + cellWidth/2 + 5},${ghostCellY + cellHeight/2}`} stroke="#bbb" strokeWidth="2.2" strokeLinecap="round" />
+              <path d={`M${ghostCellX + cellWidth/2 + 2},${ghostCellY + cellHeight/2 - 3} L${ghostCellX + cellWidth/2 + 2},${ghostCellY + cellHeight/2 + 7}`} stroke="#e5e7eb" strokeWidth="1.2" strokeLinecap="round" opacity="0.7" />
+              <path d={`M${ghostCellX + cellWidth/2 - 3},${ghostCellY + cellHeight/2 + 2} L${ghostCellX + cellWidth/2 + 7},${ghostCellY + cellHeight/2 + 2}`} stroke="#e5e7eb" strokeWidth="1.2" strokeLinecap="round" opacity="0.7" />
+            </g>
+          </>
         ) : (
           <rect
             x={ghostCellX}
@@ -1157,18 +1212,20 @@ const Canvas: React.FC = () => {
             rx="4"
           />
         )}
-        <text
-          x={ghostCellX + cellWidth / 2}
-          y={ghostCellY + cellHeight / 2 + 4}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize="24"
-          fill="#999"
-          fontFamily="sans-serif"
-          fontStyle="italic"
-        >
-          +
-        </text>
+        {style !== 'doodle' && (
+          <text
+            x={ghostCellX + cellWidth / 2}
+            y={ghostCellY + cellHeight / 2 + 4}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize="24"
+            fill="#999"
+            fontFamily="sans-serif"
+            fontStyle="italic"
+          >
+            +
+          </text>
+        )}
       </g>
     );
     const handleStackMouseDown = (e: React.MouseEvent) => {
@@ -1214,44 +1271,20 @@ const Canvas: React.FC = () => {
       }
       return (
         <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleStackMouseDown}>
-          {/* Place ghost cell and palette at the top */}
           {ghostCell}
           {paletteButton}
           {stylePopover}
-          {/* Transparent background for dragging */}
-          <rect
-            x={x}
-            y={y}
-            width={cellWidth}
-            height={cellHeight}
-            fill="transparent"
-            stroke="none"
-          />
-          {/* Minimalistic doodle-style container (vertical, wavy rectangle) */}
-          <path
-            d={`M${x+4},${y+2} L${x+cellWidth-4},${y-2} Q${x+cellWidth+2},${y+cellHeight/2} ${x+cellWidth-2},${y+cellHeight-4} L${x+4},${y+cellHeight-2} Q${x-2},${y+cellHeight/2} ${x+4},${y+2}`}
-            fill="none"
-            stroke="#222"
-            strokeWidth="1.2"
-          />
-          {/* Minimalistic doodle-style cells (vertical, no fill) */}
+          {/* 3D hand-drawn sketch effect rectangle container */}
+          <Sketch3DRect x={x} y={y} w={cellWidth} h={cellHeight} seed={0} />
+          {/* 3D hand-drawn sketch effect rectangle cells */}
           {elements.map((element: any, index: number) => {
             const cellX = x;
             const cellY = y + (elements.length - 1 - index) * cellHeight;
             const isEditingValue = editingStackCell && editingStackCell.stackId === id && editingStackCell.cellIndex === index && editingStackCell.field === 'value';
-            // In renderStack, inside elements.map, for the most recent stack, show the minus sign only on the cell with the highest index
-            const isMostRecentStack = stackIdx === stacksArr.length - 1;
             const maxIndex = Math.max(-1, ...elements.map((el: any) => el.index));
             return (
               <g key={index}>
-                {/* Slightly wavy cell border */}
-                <path
-                  d={`M${cellX+4},${cellY+2} L${cellX+cellWidth-4},${cellY-2} Q${cellX+cellWidth+2},${cellY+cellHeight/2} ${cellX+cellWidth-2},${cellY+cellHeight-4} L${cellX+4},${cellY+cellHeight-2} Q${cellX-2},${cellY+cellHeight/2} ${cellX+4},${cellY+2}`}
-                  fill="none"
-                  stroke="#222"
-                  strokeWidth="1"
-                />
-                {/* Editable value */}
+                <Sketch3DRect x={cellX} y={cellY} w={cellWidth} h={cellHeight} seed={index+1} />
                 {isEditingValue ? (
                   <foreignObject x={cellX + cellWidth * 0.1} y={cellY + cellHeight * 0.25} width={cellWidth * 0.8} height={cellHeight * 0.5}>
                     <input
@@ -1266,7 +1299,6 @@ const Canvas: React.FC = () => {
                   </foreignObject>
                 ) : (
                   <>
-                    {/* Transparent background for easier clicking */}
                     <rect
                       x={cellX + cellWidth * 0.1}
                       y={cellY + cellHeight * 0.1}
@@ -1295,7 +1327,6 @@ const Canvas: React.FC = () => {
                     </text>
                   </>
                 )}
-                {/* Delete button (minus sign) - only show if more than 1 cell and this is the topmost cell */}
                 {element.index === maxIndex && (
                   <g
                     style={{ cursor: 'pointer' }}
@@ -1328,16 +1359,6 @@ const Canvas: React.FC = () => {
               </g>
             );
           })}
-        </g>
-      );
-    }
-    // Textbook style (default)
-    if (elements.length === 0) {
-      return (
-        <g key={id} onMouseEnter={handleGroupMouseEnter} onMouseLeave={handleGroupMouseLeave} style={groupStyle} onMouseDown={handleStackMouseDown}>
-          {ghostCell}
-          {paletteButton}
-          {stylePopover}
         </g>
       );
     }
