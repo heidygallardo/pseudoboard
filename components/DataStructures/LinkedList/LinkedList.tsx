@@ -654,8 +654,9 @@ const LinkedList: React.FC<LinkedListProps> = ({
                 <Box
                   position="absolute"
                   left={`${leftOffset}px`}
-                  top="20px"
+                  top="18px"
                   cursor="pointer"
+                  zIndex="10"
                   onMouseDown={(e) => {
                     e.stopPropagation();
                     setDraggingHead(true);
@@ -667,13 +668,13 @@ const LinkedList: React.FC<LinkedListProps> = ({
                     });
                   }}
                 >
-                  <svg width="20" height="35">
+                  <svg width="20" height="40">
                     <defs>
                       <marker id="arrowhead-head-down" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="90" markerUnits="strokeWidth">
                         <polygon points="0,0 8,4 0,8" fill="#007bff" />
                       </marker>
                     </defs>
-                    <line x1="10" y1="0" x2="10" y2="30" stroke="#007bff" strokeWidth="1.5" markerEnd="url(#arrowhead-head-down)" />
+                    <line x1="10" y1="0" x2="10" y2="20" stroke="#007bff" strokeWidth="1.5" markerEnd="url(#arrowhead-head-down)" />
                   </svg>
                 </Box>
               );
