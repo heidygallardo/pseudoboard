@@ -51,6 +51,8 @@ interface LinkedListDataStructure {
   y: number;
   nodes: LinkedListNode[];
   style: 'textbook' | 'doodle';
+  nodeShape: 'rectangle' | 'circle';
+  headNodeId?: string | null;
 }
 
 interface CanvasContextType {
@@ -75,6 +77,12 @@ interface CanvasContextType {
   setLinkedLists: (linkedLists: LinkedListDataStructure[]) => void;
   addLinkedList: (linkedList: LinkedListDataStructure) => void;
   updateLinkedListStyle: (id: string, style: 'textbook' | 'doodle') => void;
+  updateLinkedListNodeShape: (id: string, nodeShape: 'rectangle' | 'circle') => void;
+  addLinkedListNode: (linkedListId: string) => void;
+  deleteLinkedListNode: (linkedListId: string, nodeId: string) => void;
+  updateLinkedListNodeValue: (linkedListId: string, nodeId: string, value: string) => void;
+  updateLinkedListNodeConnection: (linkedListId: string, nodeId: string, targetNodeId: string | null) => void;
+  updateLinkedListHeadPointer: (linkedListId: string, nodeId: string | null) => void;
 }
 
 const CanvasContext = createContext<CanvasContextType | undefined>(undefined);
@@ -116,6 +124,71 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setLinkedLists(prev => prev.map(ll => ll.id === id ? { ...ll, style } : ll));
   };
 
+  const updateLinkedListNodeShape = (id: string, nodeShape: 'rectangle' | 'circle') => {
+    setLinkedLists(prev => prev.map(ll => ll.id === id ? { ...ll, nodeShape } : ll));
+  };
+
+  const addLinkedListNode = (linkedListId: string) => {
+    setLinkedLists(prev => prev.map(ll => {
+      if (ll.id === linkedListId) {
+        const newNode: LinkedListNode = {
+          id: `node-${Date.now()}-${Math.random()}`,
+          value: '',
+          next: null
+        };
+        return { ...ll, nodes: [...ll.nodes, newNode] };
+      }
+      return ll;
+    }));
+  };
+
+  const deleteLinkedListNode = (linkedListId: string, nodeId: string) => {
+    setLinkedLists(prev => prev.map(ll => {
+      if (ll.id === linkedListId) {
+        const updatedNodes = ll.nodes.filter(node => node.id !== nodeId);
+        // Update any connections that pointed to the deleted node
+        const cleanedNodes = updatedNodes.map(node => 
+          node.next === nodeId ? { ...node, next: null } : node
+        );
+        // If the deleted node was the head, update head pointer
+        const newHeadNodeId = ll.headNodeId === nodeId ? 
+          (cleanedNodes.length > 0 ? cleanedNodes[0].id : null) : ll.headNodeId;
+        return { ...ll, nodes: cleanedNodes, headNodeId: newHeadNodeId };
+      }
+      return ll;
+    }));
+  };
+
+  const updateLinkedListNodeValue = (linkedListId: string, nodeId: string, value: string) => {
+    setLinkedLists(prev => prev.map(ll => {
+      if (ll.id === linkedListId) {
+        const updatedNodes = ll.nodes.map(node => 
+          node.id === nodeId ? { ...node, value } : node
+        );
+        return { ...ll, nodes: updatedNodes };
+      }
+      return ll;
+    }));
+  };
+
+  const updateLinkedListNodeConnection = (linkedListId: string, nodeId: string, targetNodeId: string | null) => {
+    setLinkedLists(prev => prev.map(ll => {
+      if (ll.id === linkedListId) {
+        const updatedNodes = ll.nodes.map(node => 
+          node.id === nodeId ? { ...node, next: targetNodeId } : node
+        );
+        return { ...ll, nodes: updatedNodes };
+      }
+      return ll;
+    }));
+  };
+
+  const updateLinkedListHeadPointer = (linkedListId: string, nodeId: string | null) => {
+    setLinkedLists(prev => prev.map(ll => 
+      ll.id === linkedListId ? { ...ll, headNodeId: nodeId } : ll
+    ));
+  };
+
   return (
     <CanvasContext.Provider
       value={{
@@ -140,6 +213,12 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setLinkedLists,
         addLinkedList,
         updateLinkedListStyle,
+        updateLinkedListNodeShape,
+        addLinkedListNode,
+        deleteLinkedListNode,
+        updateLinkedListNodeValue,
+        updateLinkedListNodeConnection,
+        updateLinkedListHeadPointer,
       }}
     >
       {children}

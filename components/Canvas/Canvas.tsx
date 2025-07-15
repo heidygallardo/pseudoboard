@@ -23,7 +23,7 @@ const DOODLE_ICON = (
 
 const Canvas: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const { activeTool, zoom, position, setPosition, strokes, addStroke, arrays, addArray, updateArrayStyle, setActiveTool, setArrays, stacks, addStack, updateStackStyle, setStacks, linkedLists, addLinkedList, updateLinkedListStyle, setLinkedLists } = useCanvas();
+  const { activeTool, zoom, position, setPosition, strokes, addStroke, arrays, addArray, updateArrayStyle, setActiveTool, setArrays, stacks, addStack, updateStackStyle, setStacks, linkedLists, addLinkedList, updateLinkedListStyle, updateLinkedListNodeShape, addLinkedListNode, deleteLinkedListNode, updateLinkedListNodeValue, updateLinkedListNodeConnection, updateLinkedListHeadPointer, setLinkedLists } = useCanvas();
   const [dragging, setDragging] = useState(false);
   const [start, setStart] = useState({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
@@ -817,6 +817,7 @@ const Canvas: React.FC = () => {
       y,
       nodes: defaultNodes,
       style: 'textbook' as 'textbook',
+      nodeShape: 'rectangle' as 'rectangle',
     };
   };
 
@@ -857,55 +858,6 @@ const Canvas: React.FC = () => {
     }));
   };
 
-  const addLinkedListNode = (linkedListId: string) => {
-    const ll = linkedLists.find(l => l.id === linkedListId);
-    if (!ll) return;
-    
-    const newNodeId = Date.now().toString();
-    const newNodes = [
-      ...ll.nodes,
-      { id: newNodeId, value: '', next: null },
-    ];
-    
-    // Update the previous node's next pointer
-    if (ll.nodes.length > 0) {
-      newNodes[ll.nodes.length - 1].next = newNodeId;
-    }
-    
-    const updated = linkedLists.map(l => l.id === linkedListId ? { ...l, nodes: newNodes } : l);
-    setLinkedLists(updated);
-  };
-
-  const deleteLinkedListNode = (linkedListId: string, nodeId: string) => {
-    const ll = linkedLists.find(l => l.id === linkedListId);
-    if (!ll || ll.nodes.length <= 1) return; // Don't delete if only one node remains
-    
-    const nodeIndex = ll.nodes.findIndex(node => node.id === nodeId);
-    if (nodeIndex === -1) return;
-    
-    const newNodes = ll.nodes.filter(node => node.id !== nodeId);
-    
-    // Update the next pointer of the previous node
-    if (nodeIndex > 0 && nodeIndex < ll.nodes.length - 1) {
-      newNodes[nodeIndex - 1].next = newNodes[nodeIndex].id;
-    } else if (nodeIndex > 0) {
-      newNodes[nodeIndex - 1].next = null;
-    }
-    
-    const updated = linkedLists.map(l => l.id === linkedListId ? { ...l, nodes: newNodes } : l);
-    setLinkedLists(updated);
-  };
-
-  const updateLinkedListNodeValue = (linkedListId: string, nodeId: string, value: string) => {
-    setLinkedLists(linkedLists.map(ll => {
-      if (ll.id !== linkedListId) return ll;
-      const newNodes = ll.nodes.map(node => {
-        if (node.id !== nodeId) return node;
-        return { ...node, value };
-      });
-      return { ...ll, nodes: newNodes };
-    }));
-  };
 
   // Stack rendering (copied from array, but vertical and minimalistic)
   const renderStack = (stack: any, stackIdx: number, stacksArr: any[]) => {
@@ -1423,9 +1375,14 @@ const Canvas: React.FC = () => {
               onAddNode={addLinkedListNode}
               onDeleteNode={deleteLinkedListNode}
               onUpdateNodeValue={updateLinkedListNodeValue}
+              onUpdateNodeConnection={updateLinkedListNodeConnection}
+              onUpdateHeadPointer={updateLinkedListHeadPointer}
               onStyleChange={updateLinkedListStyle}
+              onNodeShapeChange={updateLinkedListNodeShape}
               isHovered={hoveredLinkedListId === linkedList.id}
               isDragging={draggingLinkedListId === linkedList.id && isActuallyDraggingLinkedList}
+              canvasPosition={position}
+              canvasZoom={zoom}
               onMouseDown={(e) => {
                 if (activeTool !== 'move') return;
                 if (e.button !== 0) return;
