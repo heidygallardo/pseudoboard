@@ -43,6 +43,7 @@ interface LinkedListNode {
   id: string;
   value: string;
   next: string | null;
+  isDeleted?: boolean;
 }
 
 interface LinkedListDataStructure {
@@ -145,14 +146,23 @@ export const CanvasProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const deleteLinkedListNode = (linkedListId: string, nodeId: string) => {
     setLinkedLists(prev => prev.map(ll => {
       if (ll.id === linkedListId) {
-        const updatedNodes = ll.nodes.filter(node => node.id !== nodeId);
-        // Update any connections that pointed to the deleted node
-        const cleanedNodes = updatedNodes.map(node => 
-          node.next === nodeId ? { ...node, next: null } : node
+        // Mark the node as deleted instead of removing it
+        const updatedNodes = ll.nodes.map(node => 
+          node.id === nodeId ? { ...node, isDeleted: true } : node
         );
-        // If the deleted node was the head, update head pointer
-        const newHeadNodeId = ll.headNodeId === nodeId ? 
-          (cleanedNodes.length > 0 ? cleanedNodes[0].id : null) : ll.headNodeId;
+        
+        // Find the deleted node and its next pointer
+        const deletedNode = updatedNodes.find(node => node.id === nodeId);
+        const deletedNodeNext = deletedNode?.next ?? null;
+        
+        // Update any connections that pointed to the deleted node to point to its next
+        const cleanedNodes = updatedNodes.map(node => 
+          node.next === nodeId ? { ...node, next: deletedNodeNext } : node
+        );
+        
+        // If the deleted node was the head, update head pointer to its next
+        const newHeadNodeId = ll.headNodeId === nodeId ? deletedNodeNext : ll.headNodeId;
+        
         return { ...ll, nodes: cleanedNodes, headNodeId: newHeadNodeId };
       }
       return ll;

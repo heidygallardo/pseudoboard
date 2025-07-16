@@ -9,6 +9,7 @@ interface LinkedListNode {
   id: string;
   value: string;
   next: string | null;
+  isDeleted?: boolean;
 }
 
 interface LinkedListDataStructure {
@@ -215,6 +216,7 @@ const LinkedList: React.FC<LinkedListProps> = ({
     const isLastNode = index === linkedList.nodes.length - 1;
     const isCircle = linkedList.nodeShape === 'circle';
     const isSelected = selectedNodeId === node.id;
+    const isDeleted = node.isDeleted || false;
 
     // Node size
     const nodeWidth = 90;
@@ -241,6 +243,8 @@ const LinkedList: React.FC<LinkedListProps> = ({
               fontFamily: 'monospace',
               marginRight: 0,
               boxSizing: 'border-box',
+              opacity: isDeleted ? 0.3 : 1,
+              transition: 'opacity 0.3s ease',
             }}
             onClick={(e) => {
               e.stopPropagation();
@@ -336,51 +340,101 @@ const LinkedList: React.FC<LinkedListProps> = ({
             )}
           </Box>
           {/* Arrow to next node: SVG, black, thin, with arrowhead */}
-          {!isLastNode && (
-            <Box
-              style={{
-                position: 'absolute',
-                top: '50%',
-                left: `${nodeWidth}px`, // exactly at the right edge
-                width: `${arrowGap}px`,
-                height: '0',
-                pointerEvents: 'auto',
-                margin: 0,
-                padding: 0,
-              }}
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                setDraggingArrow(node.id);
-                const rect = e.currentTarget.getBoundingClientRect();
-                const containerRect = containerRef.current!.getBoundingClientRect();
-                setDragStartPos({
-                  x: rect.left - containerRect.left,
-                  y: rect.top - containerRect.top + nodeHeight / 2,
-                });
-                setDragCurrentPos({
-                  x: rect.left - containerRect.left,
-                  y: rect.top - containerRect.top + nodeHeight / 2,
-                });
-              }}
-            >
-              <svg width={arrowGap} height={nodeHeight} style={{ position: 'absolute', top: `-${nodeHeight / 2}px`, left: 0, pointerEvents: 'none', margin: 0, padding: 0 }}>
-                <defs>
-                  <marker id="arrowhead-black" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
-                    <polygon points="0,0 8,4 0,8" fill="#222" />
-                  </marker>
-                </defs>
-                <line
-                  x1={0}
-                  y1={nodeHeight / 2}
-                  x2={arrowGap}
-                  y2={nodeHeight / 2}
-                  stroke="#222"
-                  strokeWidth={1.5}
-                  markerEnd="url(#arrowhead-black)"
-                />
-              </svg>
-            </Box>
-          )}
+          {!isLastNode && !isDeleted && (() => {
+            // Check if the immediately next node in the array is deleted
+            const immediateNextNode = linkedList.nodes[index + 1];
+            const isImmediateNextDeleted = immediateNextNode?.isDeleted || false;
+            
+            // Calculate how many consecutive deleted nodes to skip for rerouted arrow
+            let deletedNodesCount = 0;
+            if (isImmediateNextDeleted) {
+              for (let i = index + 1; i < linkedList.nodes.length; i++) {
+                if (linkedList.nodes[i].isDeleted) {
+                  deletedNodesCount++;
+                } else {
+                  break;
+                }
+              }
+            }
+            
+            const arrowWidth = isImmediateNextDeleted ? arrowGap + (deletedNodesCount * (nodeWidth + arrowGap)) : arrowGap;
+            const bypassHeight = 40; // Height for the bypass curve
+            
+            return (
+              <Box
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: `${nodeWidth}px`,
+                  width: `${arrowWidth}px`,
+                  height: '0',
+                  pointerEvents: 'auto',
+                  margin: 0,
+                  padding: 0,
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  setDraggingArrow(node.id);
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const containerRect = containerRef.current!.getBoundingClientRect();
+                  setDragStartPos({
+                    x: rect.left - containerRect.left,
+                    y: rect.top - containerRect.top + nodeHeight / 2,
+                  });
+                  setDragCurrentPos({
+                    x: rect.left - containerRect.left,
+                    y: rect.top - containerRect.top + nodeHeight / 2,
+                  });
+                }}
+              >
+                <svg 
+                  width={arrowWidth} 
+                  height={isImmediateNextDeleted ? nodeHeight + bypassHeight * 2 : nodeHeight} 
+                  style={{ 
+                    position: 'absolute', 
+                    top: isImmediateNextDeleted ? `-${nodeHeight / 2 + bypassHeight}px` : `-${nodeHeight / 2}px`, 
+                    left: 0, 
+                    pointerEvents: 'none', 
+                    margin: 0, 
+                    padding: 0 
+                  }}
+                >
+                  <defs>
+                    <marker id="arrowhead-black" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
+                      <polygon points="0,0 8,4 0,8" fill="#222" />
+                    </marker>
+                  </defs>
+                  
+                  {isImmediateNextDeleted ? (
+                    // Rerouted arrow: right-down-up-right path
+                    <path
+                      d={`M 0 ${nodeHeight / 2 + bypassHeight} 
+                          L ${arrowGap / 2} ${nodeHeight / 2 + bypassHeight}
+                          L ${arrowGap / 2} ${nodeHeight / 2 + bypassHeight + bypassHeight}
+                          L ${arrowWidth - arrowGap / 2} ${nodeHeight / 2 + bypassHeight + bypassHeight}
+                          L ${arrowWidth - arrowGap / 2} ${nodeHeight / 2 + bypassHeight}
+                          L ${arrowWidth} ${nodeHeight / 2 + bypassHeight}`}
+                      fill="none"
+                      stroke="#222"
+                      strokeWidth="1.5"
+                      markerEnd="url(#arrowhead-black)"
+                    />
+                  ) : (
+                    // Normal straight arrow
+                    <line
+                      x1={0}
+                      y1={nodeHeight / 2}
+                      x2={arrowGap}
+                      y2={nodeHeight / 2}
+                      stroke="#222"
+                      strokeWidth={1.5}
+                      markerEnd="url(#arrowhead-black)"
+                    />
+                  )}
+                </svg>
+              </Box>
+            );
+          })()}
           {/* Menu Icon: only on hover or selected, right of node */}
           {(isHovered || isSelected) && isLastNode && (
             <Box
@@ -437,6 +491,7 @@ const LinkedList: React.FC<LinkedListProps> = ({
             boxShadow: 'none',
             transition: 'all 0.2s ease',
             fontFamily: 'sans-serif',
+            opacity: isDeleted ? 0.3 : 1,
           }}
           onClick={(e) => {
             e.stopPropagation();
@@ -512,49 +567,97 @@ const LinkedList: React.FC<LinkedListProps> = ({
           )}
         </Box>
         {/* Arrow to next node: SVG, black, thin, with arrowhead */}
-        {!isLastNode && (
-          <Box
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: `${nodeSize + 2}px`,
-              width: `${arrowGap}px`,
-              height: '0',
-              pointerEvents: 'auto',
-            }}
-            onMouseDown={(e) => {
-              e.stopPropagation();
-              setDraggingArrow(node.id);
-              const rect = e.currentTarget.getBoundingClientRect();
-              const containerRect = containerRef.current!.getBoundingClientRect();
-              setDragStartPos({
-                x: rect.left - containerRect.left,
-                y: rect.top - containerRect.top + nodeSize / 2,
-              });
-              setDragCurrentPos({
-                x: rect.left - containerRect.left,
-                y: rect.top - containerRect.top + nodeSize / 2,
-              });
-            }}
-          >
-            <svg width={arrowGap} height={nodeSize} style={{ position: 'absolute', top: `-${nodeSize / 2}px`, left: 0, pointerEvents: 'none' }}>
-              <defs>
-                <marker id="arrowhead-black" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
-                  <polygon points="0,0 8,4 0,8" fill="#222" />
-                </marker>
-              </defs>
-              <line
-                x1={0}
-                y1={nodeSize / 2}
-                x2={arrowGap - 8}
-                y2={nodeSize / 2}
-                stroke="#222"
-                strokeWidth={1.5}
-                markerEnd="url(#arrowhead-black)"
-              />
-            </svg>
-          </Box>
-        )}
+        {!isLastNode && !isDeleted && (() => {
+          // Check if the immediately next node in the array is deleted
+          const immediateNextNode = linkedList.nodes[index + 1];
+          const isImmediateNextDeleted = immediateNextNode?.isDeleted || false;
+          
+          // Calculate how many consecutive deleted nodes to skip for rerouted arrow
+          let deletedNodesCount = 0;
+          if (isImmediateNextDeleted) {
+            for (let i = index + 1; i < linkedList.nodes.length; i++) {
+              if (linkedList.nodes[i].isDeleted) {
+                deletedNodesCount++;
+              } else {
+                break;
+              }
+            }
+          }
+          
+          const arrowWidth = isImmediateNextDeleted ? arrowGap + (deletedNodesCount * (nodeSize + 30)) : arrowGap;
+          const bypassHeight = 40; // Height for the bypass curve
+          
+          return (
+            <Box
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: `${nodeSize + 2}px`,
+                width: `${arrowWidth}px`,
+                height: '0',
+                pointerEvents: 'auto',
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                setDraggingArrow(node.id);
+                const rect = e.currentTarget.getBoundingClientRect();
+                const containerRect = containerRef.current!.getBoundingClientRect();
+                setDragStartPos({
+                  x: rect.left - containerRect.left,
+                  y: rect.top - containerRect.top + nodeSize / 2,
+                });
+                setDragCurrentPos({
+                  x: rect.left - containerRect.left,
+                  y: rect.top - containerRect.top + nodeSize / 2,
+                });
+              }}
+            >
+              <svg 
+                width={arrowWidth} 
+                height={isImmediateNextDeleted ? nodeSize + bypassHeight * 2 : nodeSize} 
+                style={{ 
+                  position: 'absolute', 
+                  top: isImmediateNextDeleted ? `-${nodeSize / 2 + bypassHeight}px` : `-${nodeSize / 2}px`, 
+                  left: 0, 
+                  pointerEvents: 'none' 
+                }}
+              >
+                <defs>
+                  <marker id="arrowhead-black" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
+                    <polygon points="0,0 8,4 0,8" fill="#222" />
+                  </marker>
+                </defs>
+                
+                {isImmediateNextDeleted ? (
+                  // Rerouted arrow: right-down-up-right path
+                  <path
+                    d={`M 0 ${nodeSize / 2 + bypassHeight} 
+                        L ${arrowGap / 2} ${nodeSize / 2 + bypassHeight}
+                        L ${arrowGap / 2} ${nodeSize / 2 + bypassHeight + bypassHeight}
+                        L ${arrowWidth - arrowGap / 2} ${nodeSize / 2 + bypassHeight + bypassHeight}
+                        L ${arrowWidth - arrowGap / 2} ${nodeSize / 2 + bypassHeight}
+                        L ${arrowWidth - 8} ${nodeSize / 2 + bypassHeight}`}
+                    fill="none"
+                    stroke="#222"
+                    strokeWidth="1.5"
+                    markerEnd="url(#arrowhead-black)"
+                  />
+                ) : (
+                  // Normal straight arrow
+                  <line
+                    x1={0}
+                    y1={nodeSize / 2}
+                    x2={arrowGap - 8}
+                    y2={nodeSize / 2}
+                    stroke="#222"
+                    strokeWidth={1.5}
+                    markerEnd="url(#arrowhead-black)"
+                  />
+                )}
+              </svg>
+            </Box>
+          );
+        })()}
         {/* Menu Icon: only on hover or selected, right of node */}
         {(isHovered || isSelected) && isLastNode && (
           <Box
@@ -684,22 +787,47 @@ const LinkedList: React.FC<LinkedListProps> = ({
         {/* Nodes */}
         <Box display="flex" alignItems="center" gap={linkedList.nodeShape === 'rectangle' ? 0 : 30} style={{ overflow: 'visible', margin: 0, padding: 0 }}>
           {linkedList.nodes.map((node, index) => renderNode(node, index))}
-          {/* NULL label after last node */}
+          {/* NULL arrow after last node */}
           {linkedList.nodeShape === 'rectangle' && linkedList.nodes.length > 0 && (() => {
             const nodeWidth = 90; // Same as defined in renderNode
             return (
-              <Box display="flex" flexDirection="column" alignItems="center" style={{ margin: 0, padding: 0, marginLeft: 0 }}>
-                <svg width={arrowGap + 10} height={nodeHeight / 2 + 34} style={{ margin: 0, padding: 0, display: 'block' }}>
+              <Box
+                style={{
+                  position: 'relative',
+                  width: `${arrowGap}px`,
+                  height: `${nodeHeight}px`,
+                  margin: 0,
+                  padding: 0,
+                  marginLeft: `-${arrowGap}px`,
+                }}
+              >
+                <svg width={arrowGap} height={nodeHeight + 40} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', margin: 0, padding: 0 }}>
                   <defs>
-                    <marker id="arrowhead-null" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="90" markerUnits="strokeWidth">
+                    <marker id="arrowhead-null" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
                       <polygon points="0,0 8,4 0,8" fill="#222" />
                     </marker>
                   </defs>
-                  {/* L-shaped arrow: starts from center of last node's next section, then down */}
-                  <line x1={-(arrowGap + 10) + (nodeWidth * 0.35 / 2)} y1={nodeHeight / 2} x2={arrowGap} y2={nodeHeight / 2} stroke="#222" strokeWidth="1.5" />
-                  <line x1={arrowGap} y1={nodeHeight / 2} x2={arrowGap} y2={nodeHeight / 2 + 28} stroke="#222" strokeWidth="1.5" markerEnd="url(#arrowhead-null)" />
+                  {/* L-shaped arrow: horizontal line then vertical line to NULL */}
+                  <line x1={0} y1={nodeHeight / 2} x2={arrowGap / 2} y2={nodeHeight / 2} stroke="#222" strokeWidth="1.5" />
+                  <line x1={arrowGap / 2} y1={nodeHeight / 2} x2={arrowGap / 2} y2={nodeHeight + 28} stroke="#222" strokeWidth="1.5" markerEnd="url(#arrowhead-null)" />
                 </svg>
-                <Text fontSize="16px" fontWeight="normal" fontStyle="italic" color="#222" fontFamily="sans-serif" style={{ margin: 0, padding: 0, marginTop: '-2px' }}>NULL</Text>
+                <Text 
+                  fontSize="16px" 
+                  fontWeight="normal" 
+                  fontStyle="italic" 
+                  color="#222" 
+                  fontFamily="sans-serif" 
+                  style={{ 
+                    position: 'absolute', 
+                    top: `${nodeHeight + 32}px`, 
+                    left: '50%', 
+                    transform: 'translateX(-50%)',
+                    margin: 0, 
+                    padding: 0 
+                  }}
+                >
+                  NULL
+                </Text>
               </Box>
             );
           })()}
