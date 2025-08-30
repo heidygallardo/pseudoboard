@@ -1,11 +1,3 @@
-.linkedlist-node {
-  transition: all 0.2s ease;
-}
-
-.linkedlist-node:hover {
-  transform: scale(1.02);
-}
-
 .linkedlist-node.textbook {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }

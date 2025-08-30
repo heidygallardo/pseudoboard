@@ -230,6 +230,7 @@ const LinkedList: React.FC<LinkedListProps> = ({
           <Box
             className={`linkedlist-node ${linkedList.style}`}
             data-node-id={node.id}
+            data-selected={isSelected}
             style={{
               width: `${nodeWidth}px`,
               height: `${nodeHeight}px`,
@@ -253,27 +254,64 @@ const LinkedList: React.FC<LinkedListProps> = ({
             onDoubleClick={() => handleNodeDoubleClick(node.id, node.value)}
           >
             <svg width={nodeWidth} height={nodeHeight} style={{ position: 'absolute', top: 0, left: 0 }}>
+              <defs>
+                {/* Modern gradient backgrounds */}
+                <linearGradient id={`dataGradient-${node.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#f8fafc" />
+                  <stop offset="100%" stopColor="#e2e8f0" />
+                </linearGradient>
+                <linearGradient id={`nextGradient-${node.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#eff6ff" />
+                  <stop offset="100%" stopColor="#dbeafe" />
+                </linearGradient>
+              </defs>
               {linkedList.style === 'textbook' ? (
                 <>
-                  {/* Left: Data section */}
-                  <rect x="0" y="0" width={nodeWidth * 0.65} height={nodeHeight} fill="white" stroke="#222" strokeWidth="1" rx="4" />
-                  {/* Right: Next section */}
-                  <rect x={nodeWidth * 0.65} y="0" width={nodeWidth * 0.35} height={nodeHeight} fill="white" stroke="#222" strokeWidth="1" rx="4" />
+                  {/* Left: Data section with modern styling */}
+                  <rect 
+                    x="2" y="2" 
+                    width={nodeWidth * 0.65 - 4} 
+                    height={nodeHeight - 4} 
+                    fill={`url(#dataGradient-${node.id})`} 
+                    stroke="#64748b" 
+                    strokeWidth="1.5" 
+                    rx="8"
+                  />
+                  {/* Right: Next section with modern styling */}
+                  <rect 
+                    x={nodeWidth * 0.65 + 2} y="2" 
+                    width={nodeWidth * 0.35 - 4} 
+                    height={nodeHeight - 4} 
+                    fill={`url(#nextGradient-${node.id})`} 
+                    stroke="#3b82f6" 
+                    strokeWidth="1.5" 
+                    rx="8"
+                  />
+                  {/* Divider line between sections */}
+                  <line 
+                    x1={nodeWidth * 0.65} 
+                    y1="6" 
+                    x2={nodeWidth * 0.65} 
+                    y2={nodeHeight - 6} 
+                    stroke="#cbd5e1" 
+                    strokeWidth="1"
+                    opacity="0.6"
+                  />
                 </>
               ) : (
                 <>
-                  {/* Doodle style - wavy hand-drawn rectangles */}
+                  {/* Doodle style with modern organic shapes */}
                   <path
-                    d={`M4,2 L${nodeWidth * 0.65 - 4},-2 Q${nodeWidth * 0.65 + 2},${nodeHeight/2} ${nodeWidth * 0.65 - 2},${nodeHeight - 4} L4,${nodeHeight - 2} Q-2,${nodeHeight/2} 4,2`}
-                    fill="none"
-                    stroke="#222"
-                    strokeWidth="1.2"
+                    d={`M8,4 L${nodeWidth * 0.65 - 4},2 Q${nodeWidth * 0.65 + 1},${nodeHeight/2 - 1} ${nodeWidth * 0.65 - 3},${nodeHeight - 6} L6,${nodeHeight - 4} Q1,${nodeHeight/2 + 1} 8,4`}
+                    fill={`url(#dataGradient-${node.id})`}
+                    stroke="#64748b"
+                    strokeWidth="2"
                   />
                   <path
-                    d={`M${nodeWidth * 0.65 + 4},2 L${nodeWidth - 4},-2 Q${nodeWidth + 2},${nodeHeight/2} ${nodeWidth - 2},${nodeHeight - 4} L${nodeWidth * 0.65 + 4},${nodeHeight - 2} Q${nodeWidth * 0.65 - 2},${nodeHeight/2} ${nodeWidth * 0.65 + 4},2`}
-                    fill="none"
-                    stroke="#222"
-                    strokeWidth="1.2"
+                    d={`M${nodeWidth * 0.65 + 6},4 L${nodeWidth - 6},2 Q${nodeWidth - 1},${nodeHeight/2 - 1} ${nodeWidth - 4},${nodeHeight - 6} L${nodeWidth * 0.65 + 4},${nodeHeight - 4} Q${nodeWidth * 0.65 - 1},${nodeHeight/2 + 1} ${nodeWidth * 0.65 + 6},4`}
+                    fill={`url(#nextGradient-${node.id})`}
+                    stroke="#3b82f6"
+                    strokeWidth="2"
                   />
                 </>
               )}
@@ -304,38 +342,56 @@ const LinkedList: React.FC<LinkedListProps> = ({
               />
             ) : (
               <Text
-                fontSize="16px"
-                fontWeight="normal"
-                fontStyle="italic"
-                color="#222"
+                fontSize="14px"
+                fontWeight="600"
+                color="#334155"
                 textAlign="center"
-                fontFamily="sans-serif"
-                style={{ position: 'absolute', left: '0', width: `${nodeWidth * 0.65}px`, top: '50%', transform: 'translateY(-50%)', zIndex: 2 }}
+                fontFamily="'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                letterSpacing="-0.025em"
+                style={{ 
+                  position: 'absolute', 
+                  left: '0', 
+                  width: `${nodeWidth * 0.65}px`, 
+                  top: '50%', 
+                  transform: 'translateY(-50%)', 
+                  zIndex: 2,
+                  textShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                }}
               >
-                {node.value || 'null'}
+                {node.value || <span style={{ color: '#94a3b8', fontStyle: 'italic', fontWeight: '400' }}>null</span>}
               </Text>
             )}
-            {/* Delete button: only on hover or selected */}
+            {/* Modern delete button: only on hover or selected */}
             {(isHovered || isSelected) && (
               <Box
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
                 position="absolute"
-                top="-8px"
-                right="-8px"
-                width="20px"
-                height="20px"
+                top="-6px"
+                right="-6px"
+                width="18px"
+                height="18px"
                 borderRadius="50%"
-                bg="#ff4757"
+                bg="rgba(248, 113, 113, 0.9)"
                 color="white"
-                fontSize="12px"
+                fontSize="10px"
                 cursor="pointer"
-                _hover={{ bg: '#ff3742' }}
-                onClick={() => onDeleteNode(linkedList.id, node.id)}
+                transition="all 0.2s ease"
+                _hover={{ 
+                  bg: '#ef4444',
+                  transform: 'scale(1.1)',
+                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)'
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteNode(linkedList.id, node.id);
+                }}
                 style={{ lineHeight: '1' }}
               >
-                ×
+                <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+                  <path d="M1 1l6 6M7 1L1 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                </svg>
               </Box>
             )}
           </Box>
@@ -542,27 +598,37 @@ const LinkedList: React.FC<LinkedListProps> = ({
               {node.value || 'null'}
             </Text>
           )}
-          {/* Delete button: only on hover or selected */}
+          {/* Modern delete button: only on hover or selected */}
           {(isHovered || isSelected) && (
             <Box
               display="flex"
               alignItems="center"
               justifyContent="center"
               position="absolute"
-              top="-8px"
-              right="-8px"
-              width="20px"
-              height="20px"
+              top="-6px"
+              right="-6px"
+              width="18px"
+              height="18px"
               borderRadius="50%"
-              bg="#ff4757"
+              bg="rgba(248, 113, 113, 0.9)"
               color="white"
-              fontSize="12px"
+              fontSize="10px"
               cursor="pointer"
-              _hover={{ bg: '#ff3742' }}
-              onClick={() => onDeleteNode(linkedList.id, node.id)}
+              transition="all 0.2s ease"
+              _hover={{ 
+                bg: '#ef4444',
+                transform: 'scale(1.1)',
+                boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)'
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteNode(linkedList.id, node.id);
+              }}
               style={{ lineHeight: '1' }}
             >
-              ×
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+                <path d="M1 1l6 6M7 1L1 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
             </Box>
           )}
         </Box>
@@ -720,73 +786,11 @@ const LinkedList: React.FC<LinkedListProps> = ({
           >
             Linked List
           </Text>
-          {/* Add node button */}
-          {isHovered && (
-            <Box
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              width="16px"
-              height="16px"
-              borderRadius="50%"
-              bg="#007bff"
-              color="white"
-              fontSize="10px"
-              cursor="pointer"
-              _hover={{ bg: '#0056b3' }}
-              onClick={() => onAddNode(linkedList.id)}
-              style={{ lineHeight: '1' }}
-            >
-              +
-            </Box>
-          )}
         </Box>
-        {/* Head pointer under the label */}
-        {linkedList.nodes.length > 0 && (
-          <Box display="flex" flexDirection="column" alignItems="flex-start" mb="4px" position="relative">
-            <Text fontSize="13px" fontWeight="600" color="#222" mb="2px">Head</Text>
-            {/* Position Head pointer above the target node */}
-            {(() => {
-              const targetNodeId = linkedList.headNodeId || linkedList.nodes[0]?.id;
-              const targetNodeIndex = linkedList.nodes.findIndex(node => node.id === targetNodeId);
-              const nodeWidth = linkedList.nodeShape === 'rectangle' ? 90 : 75;
-              const arrowGap = linkedList.nodeShape === 'rectangle' ? 0 : 30;
-              const leftOffset = targetNodeIndex * (nodeWidth + arrowGap) + (nodeWidth / 2) - 10;
-              
-              return (
-                <Box
-                  position="absolute"
-                  left={`${leftOffset}px`}
-                  top="18px"
-                  cursor="pointer"
-                  zIndex="10"
-                  onMouseDown={(e) => {
-                    e.stopPropagation();
-                    setDraggingHead(true);
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const containerRect = containerRef.current!.getBoundingClientRect();
-                    setHeadDragPos({
-                      x: rect.left - containerRect.left + 10,
-                      y: rect.top - containerRect.top + 15,
-                    });
-                  }}
-                >
-                  <svg width="20" height="40">
-                    <defs>
-                      <marker id="arrowhead-head-down" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="90" markerUnits="strokeWidth">
-                        <polygon points="0,0 8,4 0,8" fill="#007bff" />
-                      </marker>
-                    </defs>
-                    <line x1="10" y1="0" x2="10" y2="20" stroke="#007bff" strokeWidth="1.5" markerEnd="url(#arrowhead-head-down)" />
-                  </svg>
-                </Box>
-              );
-            })()}
-          </Box>
-        )}
         {/* Nodes */}
         <Box display="flex" alignItems="center" gap={linkedList.nodeShape === 'rectangle' ? 0 : 30} style={{ overflow: 'visible', margin: 0, padding: 0 }}>
           {linkedList.nodes.map((node, index) => renderNode(node, index))}
+          
           {/* NULL arrow after last node */}
           {linkedList.nodeShape === 'rectangle' && linkedList.nodes.length > 0 && (() => {
             const nodeWidth = 90; // Same as defined in renderNode
@@ -834,11 +838,60 @@ const LinkedList: React.FC<LinkedListProps> = ({
         </Box>
         {/* Data/Next labels under first node */}
         {linkedList.nodeShape === 'rectangle' && linkedList.nodes.length > 0 && (
-          <Box display="flex" alignItems="center" gap="0" mt="2px" ml="2px">
-            <Text fontSize="10px" color="#888" style={{ width: '46px', textAlign: 'center' }}>Data</Text>
-            <Text fontSize="10px" color="#888" style={{ width: '24px', textAlign: 'center', marginLeft: '0px' }}>Next</Text>
+          <Box display="flex" alignItems="center" gap="0" mt="6px" ml="2px">
+            <Text 
+              fontSize="11px" 
+              color="#64748b" 
+              fontWeight="500" 
+              fontFamily="'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+              letterSpacing="0.025em"
+              style={{ width: '46px', textAlign: 'center', textTransform: 'uppercase' }}
+            >
+              Data
+            </Text>
+            <Text 
+              fontSize="11px" 
+              color="#3b82f6" 
+              fontWeight="500"
+              fontFamily="'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+              letterSpacing="0.025em"
+              style={{ width: '32px', textAlign: 'center', marginLeft: '10px', textTransform: 'uppercase' }}
+            >
+              Next
+            </Text>
           </Box>
         )}
+        
+        {/* Modern add button - always visible but subtle */}
+        <Box
+          position="absolute"
+          top="-40px"
+          right="0"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          width="28px"
+          height="28px"
+          borderRadius="6px"
+          bg={isHovered ? "rgba(59, 130, 246, 0.1)" : "rgba(148, 163, 184, 0.05)"}
+          border={isHovered ? "1px dashed #3b82f6" : "1px dashed #cbd5e1"}
+          color={isHovered ? "#3b82f6" : "#94a3b8"}
+          fontSize="14px"
+          cursor="pointer"
+          transition="all 0.2s ease"
+          opacity={isHovered ? 1 : 0.6}
+          _hover={{ 
+            bg: "#3b82f6", 
+            color: "white",
+            borderStyle: "solid",
+            transform: "scale(1.05)",
+            opacity: 1
+          }}
+          onClick={() => onAddNode(linkedList.id)}
+          style={{ lineHeight: '1' }}
+        >
+          +
+        </Box>
       </Box>
       {/* Context Menu */}
       {showContextMenu && (
