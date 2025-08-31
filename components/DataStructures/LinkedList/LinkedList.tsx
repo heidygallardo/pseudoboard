@@ -145,6 +145,47 @@ const LinkedList: React.FC<LinkedListProps> = ({
     setShowPointerControls(false);
   };
 
+  // Effect to handle when the current pointed node gets deleted
+  React.useEffect(() => {
+    if (currentPointer) {
+      const currentNode = linkedList.nodes.find(node => node.id === currentPointer);
+      
+      // If current node is deleted or doesn't exist
+      if (!currentNode || currentNode.isDeleted) {
+        console.log('Current node deleted, finding next valid node...');
+        
+        // Try to find the next valid (non-deleted) node
+        let nextValidNode = null;
+        
+        // First, try to advance to next node in sequence (since we're using sequential for now)
+        if (currentNode) {
+          const currentIndex = linkedList.nodes.findIndex(node => node.id === currentPointer);
+          if (currentIndex !== -1 && currentIndex < linkedList.nodes.length - 1) {
+            const nextNode = linkedList.nodes[currentIndex + 1];
+            if (nextNode && !nextNode.isDeleted) {
+              nextValidNode = nextNode.id;
+            }
+          }
+        }
+        
+        // If no valid next node, find the first non-deleted node
+        if (!nextValidNode) {
+          const firstValidNode = linkedList.nodes.find(node => !node.isDeleted);
+          nextValidNode = firstValidNode ? firstValidNode.id : null;
+        }
+        
+        console.log('Moving pointer to:', nextValidNode);
+        
+        // Update pointer or hide if no valid nodes left
+        if (nextValidNode) {
+          setCurrentPointer(nextValidNode);
+        } else {
+          hidePointers();
+        }
+      }
+    }
+  }, [linkedList.nodes, currentPointer]);
+
   // Close context menu when clicking outside
   React.useEffect(() => {
     const handleClickOutside = () => {
@@ -263,7 +304,7 @@ const LinkedList: React.FC<LinkedListProps> = ({
       return (
         <Box key={node.id} position="relative" style={{ overflow: 'visible', minWidth: nodeWidth + arrowGap }}>
           {/* Current pointer arrow above this node */}
-          {currentPointer === node.id && (
+          {currentPointer === node.id && !isDeleted && (
             <Box
               position="absolute"
               top="-50px"
@@ -601,7 +642,7 @@ const LinkedList: React.FC<LinkedListProps> = ({
     return (
       <Box key={node.id} position="relative" style={{ overflow: 'visible', minWidth: nodeSize + arrowGap }}>
         {/* Current pointer arrow above this circle node */}
-        {currentPointer === node.id && (
+        {currentPointer === node.id && !isDeleted && (
           <Box
             position="absolute"
             top="-50px"
