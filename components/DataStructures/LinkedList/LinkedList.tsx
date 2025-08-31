@@ -72,6 +72,10 @@ const LinkedList: React.FC<LinkedListProps> = ({
   const [headDragPos, setHeadDragPos] = useState({ x: 0, y: 0 });
   const containerRef = React.useRef<HTMLDivElement>(null);
 
+  // Pointer navigation state
+  const [currentPointer, setCurrentPointer] = useState<string | null>(null);
+  const [showPointerControls, setShowPointerControls] = useState(false);
+
   const handleNodeDoubleClick = (nodeId: string, currentValue: string) => {
     setEditingNode(nodeId);
     setEditValue(currentValue);
@@ -107,6 +111,38 @@ const LinkedList: React.FC<LinkedListProps> = ({
 
   const handleContextMenuClose = () => {
     setShowContextMenu(false);
+  };
+
+  // Pointer navigation functions
+  const initializePointer = () => {
+    if (linkedList.nodes.length > 0) {
+      setCurrentPointer(linkedList.nodes[0].id);
+      setShowPointerControls(true);
+    }
+  };
+
+  const advancePointer = () => {
+    if (!currentPointer) return;
+    
+    const currentNodeIndex = linkedList.nodes.findIndex(node => node.id === currentPointer);
+    if (currentNodeIndex === -1) return;
+    
+    // For now, advance to next node in array (sequential)
+    // TODO: Later we can use actual next pointers when they're properly set
+    if (currentNodeIndex < linkedList.nodes.length - 1) {
+      setCurrentPointer(linkedList.nodes[currentNodeIndex + 1].id);
+    }
+  };
+
+  const resetPointer = () => {
+    if (linkedList.nodes.length > 0) {
+      setCurrentPointer(linkedList.nodes[0].id);
+    }
+  };
+
+  const hidePointers = () => {
+    setCurrentPointer(null);
+    setShowPointerControls(false);
   };
 
   // Close context menu when clicking outside
@@ -226,6 +262,40 @@ const LinkedList: React.FC<LinkedListProps> = ({
     if (!isCircle) {
       return (
         <Box key={node.id} position="relative" style={{ overflow: 'visible', minWidth: nodeWidth + arrowGap }}>
+          {/* Current pointer arrow above this node */}
+          {currentPointer === node.id && (
+            <Box
+              position="absolute"
+              top="-50px"
+              left="32.5%"
+              transform="translateX(-50%)"
+              zIndex="15"
+              display="flex"
+              alignItems="center"
+              flexDirection="column"
+            >
+              <Text 
+                fontSize="9px" 
+                fontWeight="600" 
+                color="#16a34a" 
+                mb="1px"
+                fontFamily="'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                letterSpacing="0.025em"
+                textTransform="uppercase"
+              >
+                Current
+              </Text>
+              <svg width="20" height="35">
+                <defs>
+                  <marker id="current-pointer-arrow" markerWidth="5" markerHeight="5" refX="2.5" refY="2.5" orient="90" markerUnits="strokeWidth">
+                    <polygon points="0,0 5,2.5 0,5" fill="#16a34a" />
+                  </marker>
+                </defs>
+                <line x1="10" y1="2" x2="10" y2="25" stroke="#16a34a" strokeWidth="2" markerEnd="url(#current-pointer-arrow)" />
+              </svg>
+            </Box>
+          )}
+          
           {/* Rectangle node as SVG split into two sections */}
           <Box
             className={`linkedlist-node ${linkedList.style}`}
@@ -530,6 +600,40 @@ const LinkedList: React.FC<LinkedListProps> = ({
     // Circle node rendering
     return (
       <Box key={node.id} position="relative" style={{ overflow: 'visible', minWidth: nodeSize + arrowGap }}>
+        {/* Current pointer arrow above this circle node */}
+        {currentPointer === node.id && (
+          <Box
+            position="absolute"
+            top="-50px"
+            left="50%"
+            transform="translateX(-50%)"
+            zIndex="15"
+            display="flex"
+            alignItems="center"
+            flexDirection="column"
+          >
+            <Text 
+              fontSize="9px" 
+              fontWeight="600" 
+              color="#16a34a" 
+              mb="1px"
+              fontFamily="'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+              letterSpacing="0.025em"
+              textTransform="uppercase"
+            >
+              Current
+            </Text>
+            <svg width="20" height="35">
+              <defs>
+                <marker id="current-pointer-arrow-circle" markerWidth="5" markerHeight="5" refX="2.5" refY="2.5" orient="90" markerUnits="strokeWidth">
+                  <polygon points="0,0 5,2.5 0,5" fill="#16a34a" />
+                </marker>
+              </defs>
+              <line x1="10" y1="2" x2="10" y2="25" stroke="#16a34a" strokeWidth="2" markerEnd="url(#current-pointer-arrow-circle)" />
+            </svg>
+          </Box>
+        )}
+        
         <Box
           className={`linkedlist-node ${linkedList.style}`}
           data-node-id={node.id}
@@ -775,8 +879,8 @@ const LinkedList: React.FC<LinkedListProps> = ({
       }}
     >
       <Box display="flex" flexDirection="column" gap="6px">
-        {/* Header with label and add button */}
-        <Box display="flex" alignItems="center" gap="6px" mb="8px">
+        {/* Header with label */}
+        <Box display="flex" alignItems="center" mb="8px">
           <Text
             fontSize="11px"
             fontWeight="500"
@@ -787,6 +891,7 @@ const LinkedList: React.FC<LinkedListProps> = ({
             Linked List
           </Text>
         </Box>
+
         {/* Nodes */}
         <Box display="flex" alignItems="center" gap={linkedList.nodeShape === 'rectangle' ? 0 : 30} style={{ overflow: 'visible', margin: 0, padding: 0 }}>
           {linkedList.nodes.map((node, index) => renderNode(node, index))}
@@ -862,35 +967,176 @@ const LinkedList: React.FC<LinkedListProps> = ({
           </Box>
         )}
         
-        {/* Modern add button - always visible but subtle */}
-        <Box
-          position="absolute"
-          top="-40px"
-          right="0"
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-          width="28px"
-          height="28px"
-          borderRadius="6px"
-          bg={isHovered ? "rgba(59, 130, 246, 0.1)" : "rgba(148, 163, 184, 0.05)"}
-          border={isHovered ? "1px dashed #3b82f6" : "1px dashed #cbd5e1"}
-          color={isHovered ? "#3b82f6" : "#94a3b8"}
-          fontSize="14px"
-          cursor="pointer"
-          transition="all 0.2s ease"
-          opacity={isHovered ? 1 : 0.6}
-          _hover={{ 
-            bg: "#3b82f6", 
-            color: "white",
-            borderStyle: "solid",
-            transform: "scale(1.05)",
-            opacity: 1
-          }}
-          onClick={() => onAddNode(linkedList.id)}
-          style={{ lineHeight: '1' }}
-        >
-          +
+        {/* Control buttons below the linked list */}
+<Box display="flex" alignItems="center" gap="6px" mt="28px">
+          {/* Pointer control buttons */}
+          {!showPointerControls ? (
+            <>
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                px="8px"
+                py="4px"
+                borderRadius="4px"
+                bg="rgba(34, 197, 94, 0.1)"
+                border="1px dashed #22c55e"
+                color="#16a34a"
+                fontSize="10px"
+                fontWeight="500"
+                fontFamily="'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                letterSpacing="0.025em"
+                cursor="pointer"
+                transition="all 0.2s ease"
+                _hover={{ 
+                  bg: "#22c55e", 
+                  color: "white",
+                  borderStyle: "solid",
+                  transform: "scale(1.05)"
+                }}
+                onClick={initializePointer}
+                style={{ lineHeight: '1', textTransform: 'uppercase' }}
+              >
+                Start Pointer
+              </Box>
+              
+              {/* Add Node button next to Start Pointer */}
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                px="8px"
+                py="4px"
+                borderRadius="4px"
+                bg="rgba(59, 130, 246, 0.1)"
+                border="1px dashed #3b82f6"
+                color="#3b82f6"
+                fontSize="10px"
+                fontWeight="500"
+                fontFamily="'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                letterSpacing="0.025em"
+                cursor="pointer"
+                transition="all 0.2s ease"
+                _hover={{ 
+                  bg: "#3b82f6", 
+                  color: "white",
+                  borderStyle: "solid",
+                  transform: "scale(1.05)"
+                }}
+                onClick={() => onAddNode(linkedList.id)}
+                style={{ lineHeight: '1', textTransform: 'uppercase' }}
+              >
+                Add Node
+              </Box>
+            </>
+          ) : (
+            <>
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                px="6px"
+                py="4px"
+                borderRadius="4px"
+                bg="rgba(34, 197, 94, 0.1)"
+                border="1px solid #22c55e"
+                color="#16a34a"
+                fontSize="10px"
+                fontWeight="500"
+                fontFamily="'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                cursor="pointer"
+                transition="all 0.2s ease"
+                _hover={{ 
+                  bg: "#22c55e", 
+                  color: "white",
+                  transform: "scale(1.05)"
+                }}
+                onClick={advancePointer}
+                style={{ lineHeight: '1' }}
+              >
+                Next
+              </Box>
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                px="6px"
+                py="4px"
+                borderRadius="4px"
+                bg="rgba(251, 146, 60, 0.1)"
+                border="1px solid #f59e0b"
+                color="#d97706"
+                fontSize="10px"
+                fontWeight="500"
+                fontFamily="'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                cursor="pointer"
+                transition="all 0.2s ease"
+                _hover={{ 
+                  bg: "#f59e0b", 
+                  color: "white",
+                  transform: "scale(1.05)"
+                }}
+                onClick={resetPointer}
+                style={{ lineHeight: '1' }}
+              >
+                Reset
+              </Box>
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                px="6px"
+                py="4px"
+                borderRadius="4px"
+                bg="rgba(239, 68, 68, 0.1)"
+                border="1px solid #ef4444"
+                color="#dc2626"
+                fontSize="10px"
+                fontWeight="500"
+                fontFamily="'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                cursor="pointer"
+                transition="all 0.2s ease"
+                _hover={{ 
+                  bg: "#ef4444", 
+                  color: "white",
+                  transform: "scale(1.05)"
+                }}
+                onClick={hidePointers}
+                style={{ lineHeight: '1' }}
+              >
+                Hide
+              </Box>
+              
+              {/* Add Node button when pointer controls are active */}
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                px="8px"
+                py="4px"
+                borderRadius="4px"
+                bg="rgba(59, 130, 246, 0.1)"
+                border="1px dashed #3b82f6"
+                color="#3b82f6"
+                fontSize="10px"
+                fontWeight="500"
+                fontFamily="'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+                letterSpacing="0.025em"
+                cursor="pointer"
+                transition="all 0.2s ease"
+                _hover={{ 
+                  bg: "#3b82f6", 
+                  color: "white",
+                  borderStyle: "solid",
+                  transform: "scale(1.05)"
+                }}
+                onClick={() => onAddNode(linkedList.id)}
+                style={{ lineHeight: '1', textTransform: 'uppercase' }}
+              >
+                Add Node
+              </Box>
+            </>
+          )}
         </Box>
       </Box>
       {/* Context Menu */}
