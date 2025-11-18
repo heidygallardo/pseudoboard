@@ -127,11 +127,14 @@ const LinkedList: React.FC<LinkedListProps> = ({
     const currentNodeIndex = linkedList.nodes.findIndex(node => node.id === currentPointer);
     if (currentNodeIndex === -1) return;
     
-    // For now, advance to next node in array (sequential)
-    // TODO: Later we can use actual next pointers when they're properly set
-    if (currentNodeIndex < linkedList.nodes.length - 1) {
-      setCurrentPointer(linkedList.nodes[currentNodeIndex + 1].id);
+    // Find the next non-deleted node
+    for (let i = currentNodeIndex + 1; i < linkedList.nodes.length; i++) {
+      if (!linkedList.nodes[i].isDeleted) {
+        setCurrentPointer(linkedList.nodes[i].id);
+        return;
+      }
     }
+    // If no non-deleted node found, stay at current position
   };
 
   const resetPointer = () => {
